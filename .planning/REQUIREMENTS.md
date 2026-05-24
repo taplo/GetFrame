@@ -126,59 +126,71 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | STREAM-01 | Phase 1 | Pending |
-| STREAM-02 | Phase 1 | Pending |
-| STREAM-03 | Phase 1 | Pending |
-| STREAM-04 | Phase 1 | Pending |
-| STREAM-05 | Phase 1 | Pending |
-| STREAM-06 | Phase 1 | Pending |
-| STREAM-07 | Phase 1 | Pending |
-| STREAM-08 | Phase 1 | Pending |
+| STREAM-02 | Phase 2 | Pending |
+| STREAM-03 | Phase 2 | Pending |
+| STREAM-04 | Phase 2 | Pending |
+| STREAM-05 | Phase 2 | Pending |
+| STREAM-06 | Phase 2 | Pending |
+| STREAM-07 | Phase 2 | Pending |
+| STREAM-08 | Phase 2 | Pending |
 | RULE-01 | Phase 1 | Pending |
-| RULE-02 | Phase 1 | Pending |
-| RULE-03 | Phase 1 | Pending |
-| RULE-04 | Phase 2 | Pending |
-| RULE-05 | Phase 2 | Pending |
-| RULE-06 | Phase 1 | Pending |
+| RULE-02 | Phase 3 | Pending |
+| RULE-03 | Phase 3 | Pending |
+| RULE-04 | Phase 4 | Pending |
+| RULE-05 | Phase 4 | Pending |
+| RULE-06 | Phase 3 | Pending |
 | FRAME-01 | Phase 1 | Pending |
 | FRAME-02 | Phase 1 | Pending |
 | FRAME-03 | Phase 1 | Pending |
-| FRAME-04 | Phase 2 | Pending |
+| FRAME-04 | Phase 5 | Pending |
 | KAFKA-01 | Phase 1 | Pending |
 | KAFKA-02 | Phase 1 | Pending |
 | KAFKA-03 | Phase 1 | Pending |
-| KAFKA-04 | Phase 1 | Pending |
-| KAFKA-05 | Phase 2 | Pending |
-| KAFKA-06 | Phase 1 | Pending |
-| API-01 | Phase 1 | Pending |
-| API-02 | Phase 1 | Pending |
-| API-03 | Phase 1 | Pending |
-| API-04 | Phase 1 | Pending |
-| API-05 | Phase 2 | Pending |
-| UI-01 | Phase 2 | Pending |
-| UI-02 | Phase 2 | Pending |
-| UI-03 | Phase 2 | Pending |
-| UI-04 | Phase 2 | Pending |
-| UI-05 | Phase 2 | Pending |
-| UI-06 | Phase 2 | Pending |
-| UI-07 | Phase 2 | Pending |
-| OBS-01 | Phase 1 | Pending |
+| KAFKA-04 | Phase 5 | Pending |
+| KAFKA-05 | Phase 5 | Pending |
+| KAFKA-06 | Phase 5 | Pending |
+| API-01 | Phase 2 | Pending |
+| API-02 | Phase 6 | Pending |
+| API-03 | Phase 3 | Pending |
+| API-04 | Phase 2 | Pending |
+| API-05 | Phase 6 | Pending |
+| UI-01 | Phase 7 | Pending |
+| UI-02 | Phase 7 | Pending |
+| UI-03 | Phase 7 | Pending |
+| UI-04 | Phase 7 | Pending |
+| UI-05 | Phase 8 | Pending |
+| UI-06 | Phase 8 | Pending |
+| UI-07 | Phase 8 | Pending |
+| OBS-01 | Phase 2 | Pending |
 | OBS-02 | Phase 1 | Pending |
 | OBS-03 | Phase 1 | Pending |
-| OBS-04 | Phase 1 | Pending |
-| OBS-05 | Phase 2 | Pending |
+| OBS-04 | Phase 2 | Pending |
+| OBS-05 | Phase 10 | Pending |
 | DEPLOY-01 | Phase 1 | Pending |
-| DEPLOY-02 | Phase 1 | Pending |
-| DEPLOY-03 | Phase 1 | Pending |
-| DEPLOY-04 | Phase 2 | Pending |
-| WORKER-01 | Phase 2 | Pending |
-| WORKER-02 | Phase 2 | Pending |
-| WORKER-03 | Phase 2 | Pending |
-| WORKER-04 | Phase 2 | Pending |
+| DEPLOY-02 | Phase 10 | Pending |
+| DEPLOY-03 | Phase 10 | Pending |
+| DEPLOY-04 | Phase 10 | Pending |
+| WORKER-01 | Phase 9 | Pending |
+| WORKER-02 | Phase 9 | Pending |
+| WORKER-03 | Phase 9 | Pending |
+| WORKER-04 | Phase 9 | Pending |
 
 **Coverage:**
 - v1 requirements: 49 total
 - Mapped to phases: 49
 - Unmapped: 0 ✓
+
+**Per-Phase Requirement Counts:**
+- Phase 1 (Core Pipeline): 11 requirements
+- Phase 2 (Multi-Stream Management): 11 requirements
+- Phase 3 (Per-Stream Rule Configuration): 4 requirements
+- Phase 4 (Scene Detection & Composite Rules): 2 requirements
+- Phase 5 (Kafka Production Readiness): 4 requirements
+- Phase 6 (Task Management API): 2 requirements
+- Phase 7 (Web UI — Stream & Task Management): 4 requirements
+- Phase 8 (Web UI — Dashboard & Monitoring): 3 requirements
+- Phase 9 (Worker Scaling): 4 requirements
+- Phase 10 (Production Deployment): 4 requirements
 
 ---
 *Requirements defined: 2026-05-24*
