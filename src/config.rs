@@ -34,6 +34,8 @@ pub struct WorkerConfig {
     pub claim_batch_size: u32,
     #[serde(default = "default_claim_timeout")]
     pub claim_timeout_secs: u64,
+    #[serde(default)]
+    pub cpu_cores: String,
 }
 
 fn default_heartbeat_interval() -> u64 { 15 }

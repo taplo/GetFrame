@@ -2,6 +2,7 @@ pub mod health;
 pub mod registry;
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 use crate::config::StreamConfig;
@@ -35,6 +36,7 @@ pub struct StreamManager {
     kafka_producer: Arc<crate::kafka::KafkaProducer>,
     max_backoff_seconds: u64,
     db_pool: Option<sqlx::PgPool>,
+    stream_counter: Arc<AtomicUsize>,
 }
 
 impl StreamManager {
@@ -49,6 +51,7 @@ impl StreamManager {
             kafka_producer,
             max_backoff_seconds: 30,
             db_pool: None,
+            stream_counter: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -77,7 +80,7 @@ impl StreamManager {
 
         let mut pipeline = pipeline::Pipeline::start(
             &config, id, shutdown_token.clone(),
-            health_handle.clone(), rules_shared.clone(),
+            health_handle.clone(), rules_shared.clone(), None,
         );
 
         self.spawn_frame_consumer(id, &config, pipeline.extracted_rx.clone(),
@@ -252,7 +255,7 @@ impl StreamManager {
 
                 let mut pipeline = pipeline::Pipeline::start(
                     &cfg, stream_id, new_shutdown.clone(),
-                    health_handle.clone(), rules_shared.clone(),
+                    health_handle.clone(), rules_shared.clone(), None,
                 );
 
                 let st = storage_client.clone();
@@ -392,9 +395,19 @@ impl StreamManager {
 
         let (exit_tx, exit_rx) = tokio::sync::watch::channel(None::<PipelineExitReason>);
 
+        let core_to_pin = std::env::var("GETFRAME_CPU_CORES").ok().map(|s| {
+            let cores = crate::pipeline::parse_cpu_cores(&s);
+            if cores.is_empty() {
+                None
+            } else {
+                let idx = self.stream_counter.fetch_add(1, Ordering::Relaxed);
+                Some(cores[idx % cores.len()])
+            }
+        }).flatten();
+
         let mut pipeline = pipeline::Pipeline::start(
             &info.config, *id, shutdown_token.clone(),
-            health_handle.clone(), rules_shared.clone(),
+            health_handle.clone(), rules_shared.clone(), core_to_pin,
         );
 
         self.spawn_frame_consumer(

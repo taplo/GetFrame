@@ -11,3 +11,4 @@ pub mod api;
 pub mod metrics;
 pub mod db;
 pub mod worker;
+pub mod benchmark;

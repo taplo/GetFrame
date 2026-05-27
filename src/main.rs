@@ -11,6 +11,7 @@ mod api;
 mod metrics;
 mod db;
 mod worker;
+mod benchmark;
 
 use clap::Parser;
 use std::sync::Arc;
@@ -23,11 +24,41 @@ use utoipa_swagger_ui::SwaggerUi;
 struct Cli {
     #[arg(short, long, default_value = "config.yaml")]
     config: String,
+
+    /// 基准测试模式
+    #[arg(long)]
+    benchmark: bool,
+
+    /// 并发流数量
+    #[arg(long, default_value = "10")]
+    streams: usize,
+
+    /// 测试持续时间（秒）
+    #[arg(long, default_value_t = 30.0)]
+    duration: f64,
+
+    /// JPEG 质量
+    #[arg(long, default_value_t = 85)]
+    jpeg_quality: u8,
+
+    /// CPU 核心列表，如 "0-3,8-11"
+    #[arg(long, default_value = "")]
+    cpu_cores: String,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    if cli.benchmark {
+        ffmpeg_next::init()?;
+        let cpu_cores = crate::pipeline::parse_cpu_cores(&cli.cpu_cores);
+        let report = crate::benchmark::run_benchmark(
+            cli.streams, cli.duration, cli.jpeg_quality, &cpu_cores,
+        );
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(());
+    }
 
     let config_content = std::fs::read_to_string(&cli.config)?;
     let config: config::Config = serde_yaml::from_str(&config_content)?;
@@ -158,7 +189,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(api_router)
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api_doc))
         .route("/metrics", axum::routing::get(metrics::metrics_handler))
-        .nest_service("/", ServeDir::new("web/dist"));
+        .fallback_service(ServeDir::new("web/dist"));
 
     let listener = tokio::net::TcpListener::bind(
         format!("{}:{}", config.http.bind_address, config.http.bind_port)

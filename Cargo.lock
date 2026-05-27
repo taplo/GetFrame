@@ -1502,6 +1502,7 @@ dependencies = [
  "futures",
  "http-body-util",
  "image",
+ "libc",
  "metrics 0.23.1",
  "metrics-exporter-prometheus",
  "rdkafka",

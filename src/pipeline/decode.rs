@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
 use ffmpeg_next as ffmpeg;
 use crossbeam::channel::Sender;
 use std::collections::BTreeMap;
@@ -19,6 +20,8 @@ pub fn run_decode_pipeline(
     shutdown: tokio_util::sync::CancellationToken,
     health_handle: Arc<Mutex<StreamHealth>>,
     rules_shared: Arc<RwLock<Vec<RuleConfig>>>,
+    frames_decoded_counter: Arc<AtomicU64>,
+    frames_extracted_counter: Arc<AtomicU64>,
 ) -> Result<(), anyhow::Error> {
     tracing::info!(stream_id = %stream_id, source_url = %source_url, "Starting decode pipeline");
 
@@ -76,6 +79,7 @@ pub fn run_decode_pipeline(
             match demuxed.decoder.receive_frame(&mut frame) {
                 Ok(()) => {
                     total_frames_decoded += 1;
+                    frames_decoded_counter.fetch_add(1, Ordering::Relaxed);
                     let pts = frame.pts().unwrap_or(0);
                     let is_key = frame.is_key();
 
@@ -152,6 +156,7 @@ pub fn run_decode_pipeline(
                                             height: ready_frame.height,
                                         };
                                         frame_number += 1;
+                                        frames_extracted_counter.fetch_add(1, Ordering::Relaxed);
 
                                         if frame_tx.send(extracted).is_err() {
                                             tracing::warn!("Extracted frame channel closed, stopping pipeline");
@@ -201,6 +206,7 @@ pub fn run_decode_pipeline(
                     height: ready_frame.height,
                 };
                 frame_number += 1;
+                frames_extracted_counter.fetch_add(1, Ordering::Relaxed);
                 let _ = frame_tx.send(extracted);
             }
         }
