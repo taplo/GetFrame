@@ -204,7 +204,9 @@ impl StreamManager {
             let mut backoff_seconds: u64 = 1;
 
             loop {
-                exit_rx.changed().await.ok();
+                if exit_rx.changed().await.is_err() {
+                    break;
+                }
 
                 let reason = exit_rx.borrow().clone();
                 match &reason {
@@ -213,6 +215,10 @@ impl StreamManager {
                         break;
                     }
                     Some(PipelineExitReason::Eof) => {
+                        if config.source_type == "file" || config.source_type == "lavfi" {
+                            tracing::info!(stream_id = %stream_id, "File stream finished, pipeline will not restart");
+                            break;
+                        }
                         tracing::info!(stream_id = %stream_id, "Pipeline reached end of stream, reconnecting");
                     }
                     Some(PipelineExitReason::Error(e)) => {
@@ -380,6 +386,10 @@ impl StreamManager {
     }
 
     pub fn start_pipeline(&self, id: &StreamId) -> bool {
+        if self.pipelines.lock().unwrap().contains_key(id) {
+            return true;
+        }
+
         let info = match self.registry.get(id) {
             Some(info) => info,
             None => {

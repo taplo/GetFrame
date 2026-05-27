@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 7 complete — Web UI for Stream & Task Management
-last_updated: "2026-05-26T03:00:00.000Z"
-last_activity: 2026-05-26 -- Phase 07 code review fixes applied, all builds green
+last_updated: "2026-05-27T20:58:00.000Z"
+last_activity: 2026-05-27 -- CPU fix deployed (750%→0.57%), S3 DNS pre-resolution, dead_code clean
 progress:
   total_phases: 10
-  completed_phases: 3
+  completed_phases: 7
   total_plans: 9
   completed_plans: 9
-  percent: 30
+  percent: 70
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-05-24)
 Phase: 08 (Advanced Features / UI Polish) — PENDING
 Plan: 0 of 0
 Status: Phase 07 complete
-Last activity: 2026-05-26 -- Phase 07 code review fixes applied
+Last activity: 2026-05-27 -- CPU fix (start_pipeline idempotent, exit_rx.is_err() guard), S3 DNS pre-resolution, dead_code clean, E2E verified
 
 ## Performance Metrics
 
@@ -90,6 +90,7 @@ See PROJECT.md Key Decisions table for full log. Key decisions:
 
 ## Session Continuity
 
-Last session: 2026-05-25
-Stopped at: Phase 7 code review fixes applied — ts, vite, cargo all green
-Resume file: .planning/phases/07-web-ui/07-SPEC.md
+Last session: 2026-05-27
+Stopped at: CPU bug fixed (750%→0.57%), E2E pipeline verified, uncommitted CPU fix in src/stream/mod.rs
+Resume file: (none)
+Next action: Commit CPU fix, then advance to Phase 8
