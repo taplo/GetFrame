@@ -2,7 +2,7 @@ preload_streams: []
 
 storage:
   bucket: "getframe-frames"
-  endpoint_url: "http://minio:9000"
+  endpoint_url: "http://172.18.0.2:9000"
   region: "us-east-1"
   access_key_id: "getframe"
   secret_access_key: "getframe123"

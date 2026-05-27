@@ -1,11 +1,13 @@
 use crate::types::DecodedFrame;
 use anyhow::Result;
 use bytes::Bytes;
+use image::codecs::jpeg::JpegEncoder;
+use image::ExtendedColorType;
 use std::time::Instant;
 
 pub fn encode_jpeg(
     frame: &DecodedFrame,
-    _quality: u8,
+    quality: u8,
 ) -> Result<Bytes> {
     let timer = Instant::now();
     let width = frame.width as usize;
@@ -25,24 +27,9 @@ pub fn encode_jpeg(
     let yuv_to_rgb_us = timer.elapsed().as_micros();
 
     let encode_timer = Instant::now();
-    let mut jpeg_bytes = Vec::with_capacity(width * height);
-
-    yuvutils_rs::yuv420_to_rgb(
-        &yuvutils_rs::YuvPlanarImage {
-            y_plane: &rgb,
-            y_stride: frame.y_stride as u32,
-            u_plane: &frame.u_plane,
-            u_stride: frame.u_stride as u32,
-            v_plane: &frame.v_plane,
-            v_stride: frame.v_stride as u32,
-            width: width as u32,
-            height: height as u32,
-        },
-        &mut jpeg_bytes,
-        width as u32 * 3,
-        yuvutils_rs::YuvRange::Limited,
-        yuvutils_rs::YuvStandardMatrix::Bt601,
-    )?;
+    let mut jpeg_bytes = Vec::new();
+    let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_bytes, quality);
+    encoder.encode(&rgb, width as u32, height as u32, ExtendedColorType::Rgb8)?;
 
     let encode_us = encode_timer.elapsed().as_micros();
 
