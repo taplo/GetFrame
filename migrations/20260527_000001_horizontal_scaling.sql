@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS workers (
+    id TEXT PRIMARY KEY,
+    heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE streams ADD COLUMN IF NOT EXISTS claimed_by TEXT REFERENCES workers(id);
+ALTER TABLE streams ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_streams_claimable ON streams(claimed_by);

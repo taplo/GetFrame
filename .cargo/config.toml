@@ -1,0 +1,2 @@
+[env]
+FFMPEG_DIR = "D:\\ffmpeg\\shared\\ffmpeg-master-latest-win64-lgpl-shared"

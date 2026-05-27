@@ -1,0 +1,12 @@
+.superpowers/
+node_modules/
+web/dist/
+
+# Rust build artifacts
+target/
+
+# Temp build logs
+build_*.txt
+cargo_*.txt
+check_sys.txt
+test.obj

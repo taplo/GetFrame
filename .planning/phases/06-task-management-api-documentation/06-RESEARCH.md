@@ -554,20 +554,20 @@ All packages in this research were verified via `cargo search` from the crate re
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should task config persist as YAML somewhere, or stay purely in-memory?**
    - What we know: Current `StreamRegistry` is purely in-memory. STATE.md says "PostgreSQL deferred to Phase 6+."
    - What's unclear: Phase 6 is "Phase 6+" — should we add YAML persistence or stay in-memory?
-   - Recommendation: **Stay in-memory for MVP.** Follow the existing pattern. Task state is lost on restart, same as stream state. A later phase can add persistence.
+   - RESOLVED: **Stay in-memory for MVP.** Follow the existing pattern. Task state is lost on restart, same as stream state. A later phase can add persistence.
 
 2. **Should we annotate existing stream/rule handlers with utoipa in this phase, or only new task handlers?**
    - What we know: Success criteria says "All API endpoints are documented."
    - What's unclear: Whether "all" means all endpoints (including existing streams/rules) or just the new task endpoints.
-   - Recommendation: **Annotate all endpoints.** The effort is small (add `#[utoipa::path]` to existing handlers, `#[derive(ToSchema)]` to existing types). This satisfies the success criteria completely.
+   - RESOLVED: **Annotate all endpoints.** The effort is small (add `#[utoipa::path]` to existing handlers, `#[derive(ToSchema)]` to existing types). This satisfies the success criteria completely.
 
 3. **Should tasks reuse the existing `StreamConfig` directly or wrap it in a task-specific config?**
-   - Current approach recommendation: Reuse `StreamConfig` directly in `TaskInfo`. The task becomes a lifecycle manager around a stream config + rules. This minimizes new types.
+   - RESOLVED: Reuse `StreamConfig` directly in `TaskInfo`. The task becomes a lifecycle manager around a stream config + rules. This minimizes new types.
 
 ---
 

@@ -1,0 +1,49 @@
+# ============================================================
+# GetFrame Worker Configuration
+# ============================================================
+
+preload_streams:
+  - source_url: "rtsp://192.168.1.100:554/stream1"   # RTSP/RTMP/HLS URL or file:// path
+    source_type: "rtsp"                                 # "rtsp" | "rtmp" | "hls" | "file"
+    extract_interval_seconds: 5.0                       # Default rule (Interval/5s) created at startup
+    jpeg_quality: 85                                    # JPEG quality 1-100
+    ffmpeg_threads: 1                                   # FFmpeg decode threads (0=auto)
+    rtsp_transport: "tcp"                               # "tcp" or "udp" for RTSP transport
+
+# Rules are managed via REST API at runtime:
+#   POST /api/v1/streams/{id}/rules  {"rule": {"type": "interval", "interval_seconds": 2.0}}
+#   POST /api/v1/streams/{id}/rules  {"rule": {"type": "fps", "fps": 0.5}}
+#   POST /api/v1/streams/{id}/rules  {"rule": {"type": "rate_limited", "rule": {"type": "interval", "interval_seconds": 1.0}, "max_per_minute": 10}}
+#   GET  /api/v1/streams/{id}/rules
+#   PUT  /api/v1/streams/{id}/rules/{index}  {"rule": ...}
+#   DELETE /api/v1/streams/{id}/rules/{index}
+# Rule changes take effect immediately without pipeline restart.
+
+storage:
+  bucket: "getframe-frames"                           # S3 bucket name
+  endpoint_url: "http://localhost:9000"                # MinIO endpoint (omit for AWS S3)
+  region: "us-east-1"                                 # AWS region (MinIO: ignored)
+
+kafka:
+  brokers: "localhost:9092"                            # Comma-separated broker list
+  topic: "getframe-frames"                             # Target topic
+  acks: "1"                                            # Producer acks: 0, 1, all
+  compression: "zstd"                                  # none, gzip, snappy, lz4, zstd
+
+database:
+  url: "postgresql://getframe:getframe@localhost:5432/getframe"
+  max_connections: 10
+
+worker:
+  id: ""                           # 默认取 K8s pod hostname
+  heartbeat_interval_secs: 15      # 心跳间隔（秒）
+  claim_batch_size: 5              # 每次抢占 stream 数量
+  claim_timeout_secs: 30           # claim 过期时间（秒）
+
+http:
+  bind_address: "0.0.0.0"
+  bind_port: 8080
+
+logging:
+  level: "info"                                        # RUST_LOG compatible
+  json: true                                           # Structured JSON output
