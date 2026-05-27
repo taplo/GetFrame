@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 #[derive(Debug, Clone, PartialEq)]
 pub enum StreamStatus {
     Online,
+    #[allow(dead_code)]
     Offline,
     Error(String),
     Connecting,
@@ -43,14 +44,17 @@ impl StreamHealth {
         self.latest_frame_key = Some(key);
     }
 
+    #[allow(dead_code)]
     pub fn record_decode_frame(&mut self) {
         self.frames_decoded += 1;
     }
 
+    #[allow(dead_code)]
     pub fn record_extracted_frame(&mut self) {
         self.frames_extracted += 1;
     }
 
+    #[allow(dead_code)]
     pub fn record_pts(&mut self, pts: i64) {
         self.last_pts = Some(pts);
     }

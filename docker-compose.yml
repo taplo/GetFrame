@@ -65,6 +65,7 @@ services:
       - "8080:8080"
     volumes:
       - ./config.docker.yaml:/etc/getframe/config.yaml
+      - ./samples:/samples
     restart: unless-stopped
 
 volumes:

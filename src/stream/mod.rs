@@ -15,7 +15,9 @@ use crate::types::StreamId;
 #[derive(Debug, Clone)]
 pub enum PipelineExitReason {
     UserInitiated,
+    #[allow(dead_code)]
     Error(String),
+    #[allow(dead_code)]
     Eof,
 }
 

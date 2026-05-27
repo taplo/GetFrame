@@ -89,6 +89,7 @@ impl TaskRegistry {
         }
     }
 
+    #[allow(dead_code)]
     pub fn update_frames(&self, id: &TaskId, frames_extracted: u64) -> bool {
         let mut inner = self.inner.write().unwrap();
         if let Some(info) = inner.tasks.get_mut(id) {
@@ -99,16 +100,19 @@ impl TaskRegistry {
         }
     }
 
+    #[allow(dead_code)]
     pub fn exists(&self, id: &TaskId) -> bool {
         let inner = self.inner.read().unwrap();
         inner.tasks.contains_key(id)
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         let inner = self.inner.read().unwrap();
         inner.tasks.len()
     }
 
+    #[allow(dead_code)]
     pub fn load_all(&self, tasks: Vec<TaskInfo>) {
         let mut inner = self.inner.write().unwrap();
         for t in tasks {

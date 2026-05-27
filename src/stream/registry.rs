@@ -62,6 +62,7 @@ impl StreamRegistry {
         inner.streams.values().cloned().collect()
     }
 
+    #[allow(dead_code)]
     pub fn update_health(&self, id: &StreamId, health: StreamHealth) {
         let mut inner = self.inner.write().unwrap();
         if let Some(info) = inner.streams.get_mut(id) {
@@ -94,6 +95,7 @@ impl StreamRegistry {
         inner.streams.len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }

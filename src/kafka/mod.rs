@@ -15,6 +15,7 @@ use std::time::Duration;
 pub struct KafkaProducer {
     producer: FutureProducer,
     topic: String,
+    #[allow(dead_code)]
     schema_registry_client: Option<Arc<SchemaRegistryClient>>,
     schema_id: Option<u32>,
 }

@@ -35,6 +35,7 @@ impl TaskManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn registry(&self) -> &TaskRegistry {
         &self.registry
     }

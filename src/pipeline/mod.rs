@@ -17,6 +17,7 @@ use std::thread::{self, JoinHandle};
 pub struct Pipeline {
     pub decode_handle: Option<JoinHandle<()>>,
     pub extracted_rx: Receiver<ExtractedFrame>,
+    #[allow(dead_code)]
     pub shutdown_token: tokio_util::sync::CancellationToken,
     pub frames_decoded: Arc<AtomicU64>,
     pub frames_extracted: Arc<AtomicU64>,
@@ -85,6 +86,7 @@ impl Pipeline {
         }
     }
 
+    #[allow(dead_code)]
     pub fn shutdown(&mut self) {
         self.shutdown_token.cancel();
         if let Some(handle) = self.decode_handle.take() {

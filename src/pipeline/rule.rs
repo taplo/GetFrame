@@ -40,6 +40,7 @@ pub enum CompositeOperator {
 }
 
 impl RuleConfig {
+    #[allow(dead_code)]
     pub fn description(&self) -> String {
         match self {
             RuleConfig::Interval { interval_seconds } => {
@@ -67,6 +68,7 @@ impl RuleConfig {
 
 pub trait RuleEvaluator: Send {
     fn should_extract(&mut self, frame: &DecodedFrame) -> bool;
+    #[allow(dead_code)]
     fn description(&self) -> String;
 }
 
@@ -108,6 +110,7 @@ fn matches_scene_change(config: &RuleConfig) -> bool {
 }
 
 pub struct IntervalEvaluator {
+    #[allow(dead_code)]
     interval_seconds: f64,
     interval_pts: i64,
     last_extracted_pts: Option<i64>,

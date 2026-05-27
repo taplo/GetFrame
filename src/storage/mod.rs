@@ -8,6 +8,32 @@ use anyhow::Result;
 use crate::types::{ExtractedFrame, StreamId};
 use chrono::Utc;
 
+/// Pre-resolve hostname to IP to avoid DNS issues with hyper connector in Docker.
+async fn resolve_endpoint(endpoint: &str) -> String {
+    let parts: Vec<&str> = endpoint.splitn(2, "://").collect();
+    let scheme = parts.first().copied().unwrap_or("http");
+    let rest = parts.get(1).copied().unwrap_or(endpoint);
+    let host_port: Vec<&str> = rest.splitn(2, ':').collect();
+    let host = host_port[0];
+    let port: u16 = host_port.get(1)
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(if scheme == "https" { 443 } else { 9000 });
+    match tokio::net::lookup_host((host, port)).await {
+        Ok(mut addrs) => {
+            if let Some(addr) = addrs.next() {
+                let resolved = format!("{}://{}:{}", scheme, addr.ip(), addr.port());
+                tracing::info!(original = %endpoint, resolved = %resolved, "Resolved S3 endpoint");
+                return resolved;
+            }
+            tracing::warn!(endpoint = %endpoint, "No addresses found for S3 endpoint host");
+        }
+        Err(e) => {
+            tracing::warn!(endpoint = %endpoint, error = %e, "Failed to resolve S3 endpoint, using original");
+        }
+    }
+    endpoint.to_string()
+}
+
 #[derive(Clone)]
 pub struct StorageClient {
     client: Client,
@@ -34,14 +60,19 @@ impl StorageClient {
                     .build()
             );
 
-        if let Some(endpoint) = &config.endpoint_url {
-            cfg_builder = cfg_builder.endpoint_url(endpoint.clone());
+        let endpoint_url = if let Some(endpoint) = &config.endpoint_url {
+            let resolved = resolve_endpoint(endpoint).await;
+            cfg_builder = cfg_builder.endpoint_url(resolved.clone());
+            cfg_builder = cfg_builder.force_path_style(true);
             if let (Some(ak), Some(sk)) = (&config.access_key_id, &config.secret_access_key) {
                 cfg_builder = cfg_builder.credentials_provider(
                     Credentials::new(ak.clone(), sk.clone(), None, None, "s3")
                 );
             }
-        }
+            Some(resolved)
+        } else {
+            None
+        };
 
         let client = Client::from_conf(cfg_builder.build());
         let bucket = config.bucket.clone();
@@ -49,7 +80,7 @@ impl StorageClient {
         Self {
             client,
             bucket,
-            endpoint_url: config.endpoint_url.clone(),
+            endpoint_url,
         }
     }
 

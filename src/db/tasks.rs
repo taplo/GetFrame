@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use sqlx::{FromRow, PgPool};
 use crate::pipeline::rule::RuleConfig;
 use crate::task::registry::{TaskId, TaskInfo, TaskStatus};

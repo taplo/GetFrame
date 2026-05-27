@@ -10,6 +10,7 @@ pub static STREAMS_TOTAL: LazyLock<metrics::Counter> = LazyLock::new(|| {
 pub static FRAMES_PROCESSED: LazyLock<metrics::Counter> = LazyLock::new(|| {
     counter!("getframe_frames_processed_total")
 });
+#[allow(dead_code)]
 pub static DECODE_ERRORS: LazyLock<metrics::Counter> = LazyLock::new(|| {
     counter!("getframe_decode_errors_total")
 });
