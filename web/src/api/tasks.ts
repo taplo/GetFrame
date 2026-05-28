@@ -1,6 +1,16 @@
 import { request } from "./client"
 import type { TaskInfo, CreateTaskRequest } from "@/types/task"
 
+export interface TaskEvent {
+  event_type: string
+  event_data: Record<string, unknown> | null
+  recorded_at: string
+}
+
+export interface TaskEventsResponse {
+  events: TaskEvent[]
+}
+
 export const tasksApi = {
   list: (params?: { status?: string }) => {
     const qs = params?.status ? `?status=${params.status}` : ""
@@ -19,4 +29,6 @@ export const tasksApi = {
     request<TaskInfo>(`/tasks/${id}/resume`, { method: "POST" }),
   stop: (id: string) =>
     request<TaskInfo>(`/tasks/${id}/stop`, { method: "POST" }),
+  events: (id: string) =>
+    request<TaskEventsResponse>(`/tasks/${id}/events`),
 }
