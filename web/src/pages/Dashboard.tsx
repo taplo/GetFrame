@@ -4,13 +4,17 @@ import { StatCard } from "@/components/StatCard"
 import { FramePreview } from "@/components/FramePreview"
 import { streamsApi } from "@/api/streams"
 import { tasksApi } from "@/api/tasks"
+import { metricsApi } from "@/api/metrics"
 import type { StreamInfo } from "@/types/stream"
 import type { TaskInfo } from "@/types/task"
+import type { MetricsPoint } from "@/types/metrics"
+import { MetricsChart } from "@/components/MetricsChart"
 
 export function Dashboard() {
   const [streams, setStreams] = useState<StreamInfo[]>([])
   const [tasks, setTasks] = useState<TaskInfo[]>([])
   const [refreshing, setRefreshing] = useState(false)
+  const [metrics, setMetrics] = useState<MetricsPoint[]>([])
   const [refreshToken, setRefreshToken] = useState(0)
 
   const load = useCallback(() => {
@@ -19,6 +23,7 @@ export function Dashboard() {
     Promise.all([
       streamsApi.list().then((res) => setStreams(res.streams)).catch(() => {}),
       tasksApi.list().then((res) => setTasks(res.tasks)).catch(() => {}),
+      metricsApi.history(30).then((res) => setMetrics(res.points)).catch(() => {}),
     ]).finally(() => setRefreshing(false))
   }, [])
 
@@ -49,6 +54,8 @@ export function Dashboard() {
           {refreshing ? "刷新中..." : "刷新"}
         </button>
       </div>
+
+      <MetricsChart points={metrics} />
 
       <div className="grid grid-cols-2 gap-6">
         <div className="bg-white border rounded-xl p-5 shadow-sm">
