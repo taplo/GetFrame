@@ -6,6 +6,8 @@ import { streamsApi } from "@/api/streams"
 import { FramePreview } from "@/components/FramePreview"
 import type { TaskInfo } from "@/types/task"
 import type { StreamInfo } from "@/types/stream"
+import { EventTimeline } from "@/components/EventTimeline"
+import type { TaskEvent } from "@/api/tasks"
 
 const statusLabel: Record<string, string> = { Created: "已创建", Running: "运行中", Paused: "已暂停", Stopped: "已停止", Error: "异常" }
 const statusStyle: Record<string, string> = {
@@ -22,6 +24,7 @@ export function TaskDetail() {
   const [task, setTask] = useState<TaskInfo | null>(null)
   const [stream, setStream] = useState<StreamInfo | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
+const [events, setEvents] = useState<TaskEvent[]>([])
 
   useEffect(() => {
     if (!id) return
@@ -29,6 +32,7 @@ export function TaskDetail() {
       setTask(t)
       return streamsApi.get(t.stream_id).then(setStream).catch(() => {})
     }).catch(() => {})
+    tasksApi.events(id).then((res) => setEvents(res.events)).catch(() => {})
   }, [id])
 
   const handleAction = async (action: "start" | "pause" | "resume" | "stop" | "delete") => {
@@ -116,6 +120,11 @@ export function TaskDetail() {
             className="w-full aspect-video rounded-lg border"
           />
         </div>
+      </div>
+
+      <div className="bg-white border rounded-xl p-5 shadow-sm">
+        <h2 className="font-semibold mb-3">事件时间线</h2>
+        <EventTimeline events={events} />
       </div>
     </div>
   )
