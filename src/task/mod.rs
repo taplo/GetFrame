@@ -198,7 +198,9 @@ impl TaskManager {
         let et = event_type.to_string();
         tokio::spawn(async move {
             if let Some(p) = pool {
-                let _ = crate::db::task_events::insert(&p, &et, &task_id, event_data).await;
+                if let Err(e) = crate::db::task_events::insert(&p, &et, &task_id, event_data).await {
+                    tracing::warn!(error = %e, task_id = %task_id, event_type = %et, "Failed to record task event");
+                }
             }
         });
     }

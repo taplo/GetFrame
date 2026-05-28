@@ -127,6 +127,10 @@ impl MetricsRecorder {
     fn extract_counter(raw: &str, name: &str) -> i64 {
         for line in raw.lines() {
             if !line.starts_with('#') && line.starts_with(name) {
+                let after = line.as_bytes().get(name.len()).copied();
+                if after.is_some_and(|c| c != b'{' && c != b' ' && c != b'\t') {
+                    continue;
+                }
                 if let Some(val) = line.split_whitespace().last() {
                     if let Ok(v) = val.parse::<f64>() {
                         return v as i64;
@@ -140,6 +144,10 @@ impl MetricsRecorder {
     fn extract_gauge(raw: &str, name: &str) -> f64 {
         for line in raw.lines() {
             if !line.starts_with('#') && line.starts_with(name) {
+                let after = line.as_bytes().get(name.len()).copied();
+                if after.is_some_and(|c| c != b'{' && c != b' ' && c != b'\t') {
+                    continue;
+                }
                 if let Some(val) = line.split_whitespace().last() {
                     if let Ok(v) = val.parse::<f64>() {
                         return v;

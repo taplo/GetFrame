@@ -33,7 +33,7 @@ const [events, setEvents] = useState<TaskEvent[]>([])
       return streamsApi.get(t.stream_id).then(setStream).catch(() => {})
     }).catch(() => {})
     tasksApi.events(id).then((res) => setEvents(res.events)).catch(() => {})
-  }, [id])
+  }, [id, refreshToken])
 
   const handleAction = async (action: "start" | "pause" | "resume" | "stop" | "delete") => {
     if (!id) return
