@@ -1,8 +1,8 @@
 CREATE TABLE IF NOT EXISTS workers (
-    id TEXT PRIMARY KEY,
-    heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+    id VARCHAR(255) PRIMARY KEY,
+    heartbeat_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-ALTER TABLE streams ADD COLUMN IF NOT EXISTS claimed_by TEXT REFERENCES workers(id);
-ALTER TABLE streams ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
-CREATE INDEX IF NOT EXISTS idx_streams_claimable ON streams(claimed_by);
+ALTER TABLE streams ADD COLUMN claimed_by VARCHAR(255);
+ALTER TABLE streams ADD COLUMN claimed_at TIMESTAMP NULL;
+CREATE INDEX idx_streams_claimable ON streams(claimed_by);

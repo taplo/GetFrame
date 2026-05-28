@@ -1,4 +1,4 @@
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, MySqlPool};
 use crate::config::StreamConfig;
 use crate::types::StreamId;
 
@@ -19,7 +19,7 @@ struct StreamRow {
     kafka_config: Option<serde_json::Value>,
 }
 
-pub async fn load_all(pool: &PgPool) -> Result<Vec<(StreamId, StreamConfig)>, sqlx::Error> {
+pub async fn load_all(pool: &MySqlPool) -> Result<Vec<(StreamId, StreamConfig)>, sqlx::Error> {
     let rows = sqlx::query_as::<_, StreamRow>(
         r#"SELECT id, name, description, tags, source_url, source_type, stream_type,
                   extract_interval_seconds, jpeg_quality, ffmpeg_threads, rtsp_transport,
@@ -57,7 +57,7 @@ pub async fn load_all(pool: &PgPool) -> Result<Vec<(StreamId, StreamConfig)>, sq
     }).collect())
 }
 
-pub async fn upsert(pool: &PgPool, id: &StreamId, config: &StreamConfig) -> Result<(), sqlx::Error> {
+pub async fn upsert(pool: &MySqlPool, id: &StreamId, config: &StreamConfig) -> Result<(), sqlx::Error> {
     let tags = serde_json::to_value(&config.tags).unwrap_or_default();
     let storage_json = config.storage.as_ref().map(|s| serde_json::to_value(s).unwrap_or_default());
     let kafka_json = config.kafka.as_ref().map(|k| serde_json::to_value(k).unwrap_or_default());
@@ -66,18 +66,17 @@ pub async fn upsert(pool: &PgPool, id: &StreamId, config: &StreamConfig) -> Resu
         r#"INSERT INTO streams (id, name, description, tags, source_url, source_type, stream_type,
                                 extract_interval_seconds, jpeg_quality, ffmpeg_threads, rtsp_transport,
                                 storage_config, kafka_config)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-           ON CONFLICT (id) DO UPDATE SET
-               name = EXCLUDED.name, description = EXCLUDED.description,
-               tags = EXCLUDED.tags, source_url = EXCLUDED.source_url,
-               source_type = EXCLUDED.source_type, stream_type = EXCLUDED.stream_type,
-               extract_interval_seconds = EXCLUDED.extract_interval_seconds,
-               jpeg_quality = EXCLUDED.jpeg_quality, ffmpeg_threads = EXCLUDED.ffmpeg_threads,
-               rtsp_transport = EXCLUDED.rtsp_transport,
-               storage_config = EXCLUDED.storage_config, kafka_config = EXCLUDED.kafka_config,
-               updated_at = NOW()"#
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+               name = VALUES(name), description = VALUES(description),
+               tags = VALUES(tags), source_url = VALUES(source_url),
+               source_type = VALUES(source_type), stream_type = VALUES(stream_type),
+               extract_interval_seconds = VALUES(extract_interval_seconds),
+               jpeg_quality = VALUES(jpeg_quality), ffmpeg_threads = VALUES(ffmpeg_threads),
+               rtsp_transport = VALUES(rtsp_transport),
+               storage_config = VALUES(storage_config), kafka_config = VALUES(kafka_config)"#
     )
-    .bind(*id)
+    .bind(id.to_string())
     .bind(&config.name)
     .bind(&config.description)
     .bind(tags)
@@ -95,9 +94,9 @@ pub async fn upsert(pool: &PgPool, id: &StreamId, config: &StreamConfig) -> Resu
     Ok(())
 }
 
-pub async fn delete(pool: &PgPool, id: &StreamId) -> Result<(), sqlx::Error> {
-    sqlx::query("DELETE FROM streams WHERE id = $1")
-        .bind(*id)
+pub async fn delete(pool: &MySqlPool, id: &StreamId) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM streams WHERE id = ?")
+        .bind(id.to_string())
         .execute(pool)
         .await?;
     Ok(())

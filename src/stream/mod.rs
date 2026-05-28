@@ -37,7 +37,7 @@ pub struct StreamManager {
     storage_client: Arc<crate::storage::StorageClient>,
     kafka_producer: Arc<crate::kafka::KafkaProducer>,
     max_backoff_seconds: u64,
-    db_pool: Option<sqlx::PgPool>,
+    db_pool: Option<sqlx::MySqlPool>,
     stream_counter: Arc<AtomicUsize>,
 }
 
@@ -57,7 +57,7 @@ impl StreamManager {
         }
     }
 
-    pub fn with_db(mut self, pool: sqlx::PgPool) -> Self {
+    pub fn with_db(mut self, pool: sqlx::MySqlPool) -> Self {
         self.db_pool = Some(pool);
         self
     }

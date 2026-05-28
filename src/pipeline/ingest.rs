@@ -42,7 +42,7 @@ pub fn open_video_source(
     decoder_ctx.set_threading(ffmpeg::codec::threading::Config {
         kind: ffmpeg::codec::threading::Type::Frame,
         count: ffmpeg_threads as usize,
-        safe: false,
+        ..Default::default()
     });
 
     let codec = ffmpeg::codec::decoder::find(codec_id)

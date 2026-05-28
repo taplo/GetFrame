@@ -12,7 +12,7 @@
 - **Kafka**: rdkafka (librdkafka bindings)
 - **HTTP API**: Axum 0.8
 - **前端**: React + TypeScript + Vite + shadcn/ui
-- **数据库**: PostgreSQL + SQLx
+- **数据库**: MySQL 8.0 + SQLx
 - **对象存储**: MinIO / S3（Claim-Check 模式）
 - **容器**: Docker 多阶段构建 + distroless
 - **K8s**: Deployments + KEDA
@@ -24,6 +24,48 @@
 3. **Claim-Check 模式**: 图片存 MinIO/S3，Kafka 只传元数据+S3 链接
 4. **核心绑定调度**: 每核 round-robin 调度 6-7 路流
 5. **Guaranteed QoS**: `limits.cpu = requests.cpu` + CPU Manager static policy
+
+## 开发与部署环境
+
+### VM (VirtualBox, localhost)
+
+| 属性 | 值 |
+|------|-----|
+| **主机** | VirtualBox VM on Windows 本机 (127.0.0.1:22) |
+| **SSH 用户** | `taplo` |
+| **认证方式** | SSH 密钥 (`~/.ssh/id_ed25519` 公钥已部署) |
+| **OS** | Ubuntu 26.04 LTS (Resolute Raccoon) |
+| **Kernel** | Linux 7.0.0-15-generic #15-Ubuntu SMP x86_64 |
+| **Hostname** | `taplo-VirtualBox` |
+| **CPU** | Intel Xeon E5-2680 @ 2.70GHz (8 cores) |
+| **Memory** | 7.2 GiB |
+| **Disk** | /dev/sda2 99G (53G used, 57%) |
+| **Docker** | v29.5.2, Compose v5.1.4 |
+| **FFmpeg** | libavcodec59 (仅 Docker 容器内可用) |
+| **网络** | NAT 10.0.2.15/24 (enp0s3), Docker bridges: 172.17.0.1, 172.18.0.1 |
+| **时区** | Asia/Shanghai |
+| **项目路径** | `/home/taplo/getframe` |
+
+### Docker 构建注意事项
+
+- Cargo / Rust 工具链 **仅 Docker 内可用**，VM 宿主机无 rust/cargo
+- Docker 构建需要 `--network host` 才能访问外网下载 crates
+- 首次构建极慢（apt 包 238MB + 全部 crate 下载 + 编译），约 40-60 分钟
+- `.rs` 文件改动后必须 SCP 同步到 VM 再 `docker build`（git 仓库不同步）
+- VM 本地 `docker build` 用 `buildx` 驱动，不支持 `docker buildx build .` 的构建输出
+
+### 文件同步工作流
+
+```bash
+# 从 Windows 本地同步变更到 VM
+scp Cargo.toml Cargo.lock taplo@127.0.0.1:/home/taplo/getframe/
+scp -r src/ taplo@127.0.0.1:/home/taplo/getframe/
+scp -r migrations/ taplo@127.0.0.1:/home/taplo/getframe/
+scp config.docker.yaml docker-compose.yml config.example.yaml taplo@127.0.0.1:/home/taplo/getframe/
+
+# VM 上构建
+ssh taplo@127.0.0.1 'cd /home/taplo/getframe && docker buildx build --network host -t getframe-worker:latest .'
+```
 
 ## GSD 工作流
 

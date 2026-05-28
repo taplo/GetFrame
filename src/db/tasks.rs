@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, MySqlPool};
 use crate::pipeline::rule::RuleConfig;
 use crate::task::registry::{TaskId, TaskInfo, TaskStatus};
 
@@ -18,7 +18,7 @@ struct TaskRow {
     stopped_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-pub async fn load_all(pool: &PgPool) -> Result<Vec<TaskInfo>, sqlx::Error> {
+pub async fn load_all(pool: &MySqlPool) -> Result<Vec<TaskInfo>, sqlx::Error> {
     let rows = sqlx::query_as::<_, TaskRow>(
         r#"SELECT id, name, stream_id, stream_name, status, rules, frames_extracted,
                   created_at, started_at, stopped_at
@@ -45,22 +45,22 @@ pub async fn load_all(pool: &PgPool) -> Result<Vec<TaskInfo>, sqlx::Error> {
     }).collect())
 }
 
-pub async fn upsert(pool: &PgPool, task: &TaskInfo) -> Result<(), sqlx::Error> {
+pub async fn upsert(pool: &MySqlPool, task: &TaskInfo) -> Result<(), sqlx::Error> {
     let rules = serde_json::to_value(&task.rules).unwrap_or_default();
     let status_str = status_to_string(&task.status);
 
     sqlx::query(
         r#"INSERT INTO tasks (id, name, stream_id, stream_name, status, rules, frames_extracted,
                               created_at, started_at, stopped_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-           ON CONFLICT (id) DO UPDATE SET
-               name = EXCLUDED.name, status = EXCLUDED.status, rules = EXCLUDED.rules,
-               frames_extracted = EXCLUDED.frames_extracted,
-               started_at = EXCLUDED.started_at, stopped_at = EXCLUDED.stopped_at"#
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+               name = VALUES(name), status = VALUES(status), rules = VALUES(rules),
+               frames_extracted = VALUES(frames_extracted),
+               started_at = VALUES(started_at), stopped_at = VALUES(stopped_at)"#
     )
-    .bind(task.id)
+    .bind(task.id.to_string())
     .bind(&task.name)
-    .bind(task.stream_id)
+    .bind(task.stream_id.to_string())
     .bind(&task.stream_name)
     .bind(&status_str)
     .bind(rules)
@@ -73,9 +73,9 @@ pub async fn upsert(pool: &PgPool, task: &TaskInfo) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-pub async fn delete(pool: &PgPool, id: &TaskId) -> Result<(), sqlx::Error> {
-    sqlx::query("DELETE FROM tasks WHERE id = $1")
-        .bind(*id)
+pub async fn delete(pool: &MySqlPool, id: &TaskId) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM tasks WHERE id = ?")
+        .bind(id.to_string())
         .execute(pool)
         .await?;
     Ok(())

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
-use sqlx::PgPool;
+use sqlx::MySqlPool;
 use std::collections::HashSet;
 
 use crate::config::{StreamConfig, WorkerConfig};
@@ -9,7 +9,7 @@ use crate::types::StreamId;
 
 pub struct WorkerManager {
     pub worker_id: String,
-    db_pool: PgPool,
+    db_pool: MySqlPool,
     stream_manager: StreamManager,
     config: WorkerConfig,
     shutdown_token: CancellationToken,
@@ -18,7 +18,7 @@ pub struct WorkerManager {
 impl WorkerManager {
     pub fn new(
         worker_id: String,
-        db_pool: PgPool,
+        db_pool: MySqlPool,
         stream_manager: StreamManager,
         config: WorkerConfig,
         shutdown_token: CancellationToken,
@@ -30,8 +30,8 @@ impl WorkerManager {
         tracing::info!(worker_id = %self.worker_id, "WorkerManager started");
 
         let _ = sqlx::query(
-            "INSERT INTO workers (id, heartbeat_at) VALUES ($1, NOW()) \
-             ON CONFLICT (id) DO UPDATE SET heartbeat_at = NOW()"
+            "INSERT INTO workers (id, heartbeat_at) VALUES (?, NOW()) \
+             ON DUPLICATE KEY UPDATE heartbeat_at = NOW()"
         )
         .bind(&self.worker_id)
         .execute(&self.db_pool)
@@ -66,7 +66,7 @@ impl WorkerManager {
 
     async fn heartbeat(&self) {
         let result = sqlx::query(
-            "UPDATE workers SET heartbeat_at = NOW() WHERE id = $1"
+            "UPDATE workers SET heartbeat_at = NOW() WHERE id = ?"
         )
         .bind(&self.worker_id)
         .execute(&self.db_pool)
@@ -82,29 +82,54 @@ impl WorkerManager {
         let timeout_interval = self.config.claim_timeout_secs as i64;
         let batch_size = self.config.claim_batch_size as i64;
 
-        let rows = match sqlx::query_as::<_, ClaimRow>(
-            r#"UPDATE streams SET claimed_by = $1, claimed_at = NOW()
+        // Step 1: Atomically claim expired or unclaimed streams
+        let updated = sqlx::query(
+            r#"UPDATE streams SET claimed_by = ?, claimed_at = NOW()
                WHERE id IN (
-                   SELECT id FROM streams
-                   WHERE claimed_by IS NULL
-                      OR claimed_at < NOW() - make_interval(secs => $2)
-                   ORDER BY created_at ASC
-                   LIMIT $3
-                   FOR UPDATE SKIP LOCKED
-               )
-               RETURNING id, name, description, tags, source_url, source_type, stream_type,
-                         extract_interval_seconds, jpeg_quality, ffmpeg_threads, rtsp_transport,
-                         storage_config, kafka_config"#
+                   SELECT id FROM (
+                       SELECT id FROM streams
+                       WHERE claimed_by IS NULL
+                          OR claimed_at < NOW() - INTERVAL ? SECOND
+                       ORDER BY created_at ASC
+                       LIMIT ?
+                   ) AS tmp
+               )"#
         )
         .bind(&self.worker_id)
         .bind(timeout_interval)
         .bind(batch_size)
+        .execute(&self.db_pool)
+        .await;
+
+        let affected = match updated {
+            Ok(r) => r.rows_affected() as usize,
+            Err(e) => {
+                tracing::error!(error = %e, worker_id = %self.worker_id, "Failed to claim streams");
+                crate::metrics::CLAIM_ERRORS.increment(1);
+                return;
+            }
+        };
+
+        if affected == 0 {
+            return;
+        }
+
+        // Step 2: Fetch the newly claimed streams
+        let rows = match sqlx::query_as::<_, ClaimRow>(
+            r#"SELECT id, name, description, tags, source_url, source_type, stream_type,
+                      extract_interval_seconds, jpeg_quality, ffmpeg_threads, rtsp_transport,
+                      storage_config, kafka_config
+               FROM streams
+               WHERE claimed_by = ? AND claimed_at >= NOW() - INTERVAL 2 SECOND
+               ORDER BY created_at ASC"#
+        )
+        .bind(&self.worker_id)
         .fetch_all(&self.db_pool)
         .await
         {
             Ok(rows) => rows,
             Err(e) => {
-                tracing::error!(error = %e, worker_id = %self.worker_id, "Failed to claim streams");
+                tracing::error!(error = %e, worker_id = %self.worker_id, "Failed to fetch claimed streams");
                 crate::metrics::CLAIM_ERRORS.increment(1);
                 return;
             }
@@ -127,7 +152,7 @@ impl WorkerManager {
 
     async fn cleanup_orphaned_streams(&self) {
         let rows = match sqlx::query_as::<_, (StreamId,)>(
-            "SELECT id FROM streams WHERE claimed_by = $1"
+            "SELECT id FROM streams WHERE claimed_by = ?"
         )
         .bind(&self.worker_id)
         .fetch_all(&self.db_pool)
@@ -160,13 +185,13 @@ impl WorkerManager {
         }
 
         let _ = sqlx::query(
-            "UPDATE streams SET claimed_by = NULL, claimed_at = NULL WHERE claimed_by = $1"
+            "UPDATE streams SET claimed_by = NULL, claimed_at = NULL WHERE claimed_by = ?"
         )
         .bind(&self.worker_id)
         .execute(&self.db_pool)
         .await;
 
-        let _ = sqlx::query("DELETE FROM workers WHERE id = $1")
+        let _ = sqlx::query("DELETE FROM workers WHERE id = ?")
             .bind(&self.worker_id)
             .execute(&self.db_pool)
             .await;

@@ -31,7 +31,7 @@ kafka:
   compression: "zstd"                                  # none, gzip, snappy, lz4, zstd
 
 database:
-  url: "postgresql://getframe:getframe@localhost:5432/getframe"
+  url: "mysql://getframe:getframe@localhost:3306/getframe"
   max_connections: 10
 
 worker:

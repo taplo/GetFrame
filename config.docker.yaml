@@ -14,7 +14,7 @@ kafka:
   compression: "snappy"
 
 database:
-  url: "postgresql://getframe:getframe@postgres:5432/getframe"
+  url: "mysql://getframe:getframe@mysql:3306/getframe"
   max_connections: 10
 
 worker:
