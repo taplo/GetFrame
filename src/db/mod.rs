@@ -1,5 +1,6 @@
 pub mod metrics_history;
 pub mod streams;
+pub mod task_events;
 pub mod tasks;
 
 use sqlx::mysql::MySqlPoolOptions;
