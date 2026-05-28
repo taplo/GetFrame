@@ -92,6 +92,7 @@ impl TaskManager {
         task.status = TaskStatus::Running;
         task.started_at = Some(Utc::now());
         self.registry.update_status(&id, TaskStatus::Running);
+        self.record_event(id, "Started", None);
         self.persist_task(&task);
         Ok(task)
     }
@@ -115,6 +116,7 @@ impl TaskManager {
         let mut task = task;
         task.status = TaskStatus::Paused;
         self.registry.update_status(&id, TaskStatus::Paused);
+        self.record_event(id, "Paused", None);
         self.persist_task(&task);
         Ok(task)
     }
@@ -145,6 +147,7 @@ impl TaskManager {
         let mut task = task;
         task.status = TaskStatus::Running;
         self.registry.update_status(&id, TaskStatus::Running);
+        self.record_event(id, "Resumed", None);
         self.persist_task(&task);
         Ok(task)
     }
@@ -169,6 +172,7 @@ impl TaskManager {
         task.status = TaskStatus::Stopped;
         task.stopped_at = Some(Utc::now());
         self.registry.update_status(&id, TaskStatus::Stopped);
+        self.record_event(id, "Stopped", None);
         self.persist_task(&task);
         Ok(task)
     }
@@ -187,6 +191,16 @@ impl TaskManager {
 
     pub fn list_tasks(&self) -> Vec<TaskInfo> {
         self.registry.list()
+    }
+
+    fn record_event(&self, task_id: TaskId, event_type: &str, event_data: Option<serde_json::Value>) {
+        let pool = self.db_pool.clone();
+        let et = event_type.to_string();
+        tokio::spawn(async move {
+            if let Some(p) = pool {
+                let _ = crate::db::task_events::insert(&p, &et, &task_id, event_data).await;
+            }
+        });
     }
 
     fn persist_task(&self, task: &TaskInfo) {
