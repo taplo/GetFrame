@@ -181,8 +181,14 @@ async fn main() -> anyhow::Result<()> {
 
     let task_manager = Arc::new(task::TaskManager::new(Arc::new(stream_manager.clone()), db_pool.clone()));
 
+    if let Some(ref pool) = db_pool {
+        let recorder = metrics::MetricsRecorder::new(pool.clone());
+        tokio::spawn(recorder.run(shutdown_token.child_token()));
+        tracing::info!("MetricsRecorder started (every 60s)");
+    }
+
     let health_router = health::health_router(health_state.clone());
-    let api_router = api::api_router(stream_manager.clone(), task_manager);
+    let api_router = api::api_router(stream_manager.clone(), task_manager, db_pool.clone());
     let api_doc = crate::api::ApiDoc::openapi();
 
     let app = health_router

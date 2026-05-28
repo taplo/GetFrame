@@ -22,7 +22,7 @@ pub struct TaskManager {
     registry: TaskRegistry,
     stream_manager: Arc<StreamManager>,
     run_streams: Arc<Mutex<HashMap<TaskId, StreamId>>>,
-    db_pool: Option<sqlx::MySqlPool>,
+    pub(crate) db_pool: Option<sqlx::MySqlPool>,
 }
 
 impl TaskManager {

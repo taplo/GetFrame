@@ -1,9 +1,11 @@
 mod streams;
 mod rules;
 mod tasks;
+mod metrics;
 
 use std::sync::Arc;
 use axum::Router;
+use sqlx::MySqlPool;
 use utoipa::OpenApi;
 use crate::stream::StreamManager;
 use crate::task::TaskManager;
@@ -39,6 +41,8 @@ use crate::task::TaskManager;
         crate::api::tasks::pause_task,
         crate::api::tasks::resume_task,
         crate::api::tasks::stop_task,
+        crate::api::tasks::get_task_events,
+        crate::api::metrics::history_handler,
     ),
     components(schemas(
         crate::health::HealthResponse,
@@ -60,13 +64,24 @@ use crate::task::TaskManager;
         crate::config::KafkaConfig,
         crate::pipeline::rule::RuleConfig,
         crate::pipeline::rule::CompositeOperator,
+        crate::api::metrics::MetricsHistoryResponse,
+        crate::api::metrics::MetricsPointResponse,
+        crate::api::metrics::HistoryQuery,
+        crate::api::tasks::TaskEventsResponse,
+        crate::api::tasks::TaskEventItem,
     ))
 )]
 pub struct ApiDoc;
 
-pub fn api_router(manager: StreamManager, task_manager: Arc<TaskManager>) -> Router {
-    Router::new()
+pub fn api_router(manager: StreamManager, task_manager: Arc<TaskManager>, db_pool: Option<MySqlPool>) -> Router {
+    let mut router = Router::new()
         .nest("/api/v1/streams", streams::stream_routes(manager.clone()))
         .nest("/api/v1/streams/{id}/rules", rules::rules_routes(manager))
-        .nest("/api/v1/tasks", tasks::task_routes(task_manager))
+        .nest("/api/v1/tasks", tasks::task_routes(task_manager));
+
+    if let Some(pool) = db_pool {
+        router = router.nest("/api/v1/metrics", metrics::metrics_routes(Arc::new(pool)));
+    }
+
+    router
 }

@@ -22,6 +22,7 @@ pub fn task_routes(manager: Arc<TaskManager>) -> Router {
         .route("/{id}/pause", axum::routing::post(pause_task))
         .route("/{id}/resume", axum::routing::post(resume_task))
         .route("/{id}/stop", axum::routing::post(stop_task))
+        .route("/{id}/events", axum::routing::get(get_task_events))
         .with_state(manager)
 }
 
@@ -188,6 +189,51 @@ pub async fn stop_task(
     manager.stop_task(id)
         .map(Json)
         .map_err(map_task_error)
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct TaskEventsResponse {
+    pub events: Vec<TaskEventItem>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct TaskEventItem {
+    pub event_type: String,
+    pub event_data: Option<serde_json::Value>,
+    pub recorded_at: String,
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/tasks/{id}/events",
+    tag = "tasks",
+    params(
+        ("id" = String, Path, description = "Task ID"),
+    ),
+    responses(
+        (status = 200, description = "Task event history", body = TaskEventsResponse),
+        (status = 503, description = "Database not available"),
+    )
+)]
+pub async fn get_task_events(
+    State(manager): State<Arc<TaskManager>>,
+    Path(id): Path<TaskId>,
+) -> Result<Json<TaskEventsResponse>, (StatusCode, Json<serde_json::Value>)> {
+    let pool = match &manager.db_pool {
+        Some(p) => p,
+        None => return Err((StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error": "no database"})))),
+    };
+
+    let rows = crate::db::task_events::query_by_task(pool, &id).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?;
+
+    let events = rows.into_iter().map(|r| TaskEventItem {
+        event_type: r.event_type,
+        event_data: r.event_data,
+        recorded_at: r.recorded_at.to_rfc3339(),
+    }).collect();
+
+    Ok(Json(TaskEventsResponse { events }))
 }
 
 fn not_found(id: TaskId) -> (StatusCode, Json<serde_json::Value>) {
