@@ -59,7 +59,7 @@ pub fn run_decode_pipeline(
         );
     }
 
-    for (stream_idx, mut recv_packet) in demuxed.ictx.packets() {
+    for (stream_idx, recv_packet) in demuxed.ictx.packets() {
         if shutdown.is_cancelled() {
             tracing::info!("Decode pipeline shutting down");
             break;
