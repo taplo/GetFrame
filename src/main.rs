@@ -72,6 +72,7 @@ async fn main() -> anyhow::Result<()> {
 
     let storage_client = Arc::new(storage::StorageClient::new(&config.storage).await);
 
+    #[allow(clippy::collapsible_if)]
     if let Some(retention_days) = config.storage.retention_days {
         if retention_days > 0 {
             let cleaner = storage::retention::RetentionCleaner::new(
@@ -135,6 +136,7 @@ async fn main() -> anyhow::Result<()> {
         for stream_cfg in &config.preload_streams {
             let id = uuid::Uuid::new_v4();
             stream_manager.registry().add(id, stream_cfg.clone());
+            #[allow(clippy::collapsible_if)]
             if let Some(ref pool) = db_pool {
                 if let Err(e) = db::streams::upsert(pool, &id, stream_cfg).await {
                     tracing::warn!(error = %e, stream_id = %id, "Failed to persist pre-loaded stream");
@@ -173,7 +175,7 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("Worker mode disabled, starting all local streams");
         let ids: Vec<_> = stream_manager.registry().all_ids();
         for id in &ids {
-            stream_manager.start_pipeline(&id);
+            stream_manager.start_pipeline(id);
         }
     }
 
