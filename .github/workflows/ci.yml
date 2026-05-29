@@ -73,7 +73,7 @@ jobs:
       - name: Run tests
         run: cargo test -- --test-threads=1
         env:
-          DATABASE_URL: mysql://root@localhost:3306/getframe_test
+          DATABASE_URL_TEST: mysql://root@localhost:3306/getframe_test
 
   docker:
     needs: test
