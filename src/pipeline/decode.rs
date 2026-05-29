@@ -192,8 +192,10 @@ pub fn run_decode_pipeline(
     }
 
     // Drain remaining frames
+    #[allow(clippy::collapsible_if)]
     while let Some((_, ready_frame)) = pts_queue.pop_first() {
-        if rule_engine.evaluate(&ready_frame) && let Ok(jpeg_bytes) = encode::encode_jpeg(&ready_frame, jpeg_quality) {
+        if rule_engine.evaluate(&ready_frame) {
+            if let Ok(jpeg_bytes) = encode::encode_jpeg(&ready_frame, jpeg_quality) {
                 let timestamp_seconds = ready_frame.pts as f64 * tb_f;
                 let extracted = ExtractedFrame {
                     stream_id,
@@ -209,6 +211,7 @@ pub fn run_decode_pipeline(
                 frame_number += 1;
                 frames_extracted_counter.fetch_add(1, Ordering::Relaxed);
                 let _ = frame_tx.send(extracted);
+            }
         }
     }
 
