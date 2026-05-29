@@ -45,6 +45,7 @@ pub fn encode_jpeg(
     Ok(Bytes::from(jpeg_bytes))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn yuv_to_rgb(
     y_plane: &[u8],
     u_plane: &[u8],

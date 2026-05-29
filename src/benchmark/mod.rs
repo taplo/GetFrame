@@ -51,6 +51,12 @@ pub struct Sampler {
     pub cpu_samples: Vec<f64>,
 }
 
+impl Default for Sampler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Sampler {
     pub fn new() -> Self {
         Self { prev_cpu: None, prev_time: None, cpu_samples: Vec::new() }
@@ -59,14 +65,12 @@ impl Sampler {
     pub fn sample(&mut self) {
         let now = Instant::now();
         let curr = CpuStats::read();
-        if let (Some(prev), Some(_pt)) = (self.prev_cpu.as_ref(), self.prev_time) {
-            if let Some(cc) = curr.as_ref() {
-                let total_delta = cc.total() - prev.total();
-                let idle_delta = cc.idle - prev.idle;
-                if total_delta > 0 {
-                    let usage = 100.0 * (1.0 - idle_delta as f64 / total_delta as f64);
-                    self.cpu_samples.push(usage);
-                }
+        if let (Some(prev), Some(cc)) = (self.prev_cpu.as_ref(), curr.as_ref()) {
+            let total_delta = cc.total() - prev.total();
+            let idle_delta = cc.idle - prev.idle;
+            if total_delta > 0 {
+                let usage = 100.0 * (1.0 - idle_delta as f64 / total_delta as f64);
+                self.cpu_samples.push(usage);
             }
         }
         self.prev_cpu = curr;

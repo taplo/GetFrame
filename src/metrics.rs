@@ -124,6 +124,7 @@ impl MetricsRecorder {
         }
     }
 
+    #[allow(clippy::collapsible_if)]
     fn extract_counter(raw: &str, name: &str) -> i64 {
         for line in raw.lines() {
             if !line.starts_with('#') && line.starts_with(name) {
@@ -141,6 +142,7 @@ impl MetricsRecorder {
         0
     }
 
+    #[allow(clippy::collapsible_if)]
     fn extract_gauge(raw: &str, name: &str) -> f64 {
         for line in raw.lines() {
             if !line.starts_with('#') && line.starts_with(name) {

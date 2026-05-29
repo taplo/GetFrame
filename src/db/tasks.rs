@@ -28,9 +28,9 @@ pub async fn load_all(pool: &MySqlPool) -> Result<Vec<TaskInfo>, sqlx::Error> {
     .fetch_all(pool)
     .await?;
 
-    Ok(rows.into_iter().filter_map(|r| {
+    Ok(rows.into_iter().map(|r| {
         let rules: Vec<RuleConfig> = serde_json::from_value(r.rules).unwrap_or_default();
-        Some(TaskInfo {
+        TaskInfo {
             id: r.id,
             name: r.name,
             stream_id: r.stream_id,
@@ -41,7 +41,7 @@ pub async fn load_all(pool: &MySqlPool) -> Result<Vec<TaskInfo>, sqlx::Error> {
             created_at: r.created_at,
             started_at: r.started_at,
             stopped_at: r.stopped_at,
-        })
+        }
     }).collect())
 }
 

@@ -8,6 +8,7 @@ use crate::stream::health::StreamHealth;
 use crate::types::*;
 use crate::pipeline::{ingest, encode};
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_decode_pipeline(
     source_url: &str,
     source_type: &str,
@@ -68,7 +69,7 @@ pub fn run_decode_pipeline(
             continue;
         }
 
-        if let Err(e) = demuxed.decoder.send_packet(&mut recv_packet) {
+        if let Err(e) = demuxed.decoder.send_packet(&recv_packet) {
             tracing::warn!(stream_id = %stream_id, error = %e, "Failed to send packet to decoder, skipping");
             continue;
         }
@@ -171,6 +172,7 @@ pub fn run_decode_pipeline(
 
                             // Periodic health update (every 30 frames)
                             health_counter += 1;
+                            #[allow(clippy::manual_is_multiple_of)]
                             if health_counter % 30 == 0 {
                                 let mut h = health_handle.lock().unwrap();
                                 h.frames_decoded = total_frames_decoded;
@@ -191,8 +193,7 @@ pub fn run_decode_pipeline(
 
     // Drain remaining frames
     while let Some((_, ready_frame)) = pts_queue.pop_first() {
-        if rule_engine.evaluate(&ready_frame) {
-            if let Ok(jpeg_bytes) = encode::encode_jpeg(&ready_frame, jpeg_quality) {
+        if rule_engine.evaluate(&ready_frame) && let Ok(jpeg_bytes) = encode::encode_jpeg(&ready_frame, jpeg_quality) {
                 let timestamp_seconds = ready_frame.pts as f64 * tb_f;
                 let extracted = ExtractedFrame {
                     stream_id,
@@ -208,7 +209,6 @@ pub fn run_decode_pipeline(
                 frame_number += 1;
                 frames_extracted_counter.fetch_add(1, Ordering::Relaxed);
                 let _ = frame_tx.send(extracted);
-            }
         }
     }
 

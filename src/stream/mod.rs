@@ -407,7 +407,7 @@ impl StreamManager {
 
         let (exit_tx, exit_rx) = tokio::sync::watch::channel(None::<PipelineExitReason>);
 
-        let core_to_pin = std::env::var("GETFRAME_CPU_CORES").ok().map(|s| {
+        let core_to_pin = std::env::var("GETFRAME_CPU_CORES").ok().and_then(|s| {
             let cores = crate::pipeline::parse_cpu_cores(&s);
             if cores.is_empty() {
                 None
@@ -415,7 +415,7 @@ impl StreamManager {
                 let idx = self.stream_counter.fetch_add(1, Ordering::Relaxed);
                 Some(cores[idx % cores.len()])
             }
-        }).flatten();
+        });
 
         let mut pipeline = pipeline::Pipeline::start(
             &info.config, *id, shutdown_token.clone(),

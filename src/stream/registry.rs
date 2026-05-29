@@ -23,6 +23,12 @@ pub struct StreamRegistry {
     inner: Arc<RwLock<RegistryInner>>,
 }
 
+impl Default for StreamRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StreamRegistry {
     pub fn new() -> Self {
         Self {

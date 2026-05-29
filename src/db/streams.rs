@@ -30,14 +30,14 @@ pub async fn load_all(pool: &MySqlPool) -> Result<Vec<(StreamId, StreamConfig)>,
     .fetch_all(pool)
     .await?;
 
-    Ok(rows.into_iter().filter_map(|r| {
+    Ok(rows.into_iter().map(|r| {
         let tags: std::collections::HashMap<String, String> =
             serde_json::from_value(r.tags).unwrap_or_default();
         let storage = r.storage_config
             .and_then(|v| serde_json::from_value(v).ok());
         let kafka = r.kafka_config
             .and_then(|v| serde_json::from_value(v).ok());
-        Some((
+        (
             r.id,
             StreamConfig {
                 name: r.name,
@@ -53,7 +53,6 @@ pub async fn load_all(pool: &MySqlPool) -> Result<Vec<(StreamId, StreamConfig)>,
                 storage,
                 kafka,
             },
-        ))
     }).collect())
 }
 

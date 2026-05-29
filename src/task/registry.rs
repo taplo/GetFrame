@@ -50,6 +50,12 @@ pub struct TaskRegistry {
     inner: Arc<RwLock<RegistryInner>>,
 }
 
+impl Default for TaskRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TaskRegistry {
     pub fn new() -> Self {
         Self {
@@ -110,6 +116,12 @@ impl TaskRegistry {
     pub fn len(&self) -> usize {
         let inner = self.inner.read().unwrap();
         inner.tasks.len()
+    }
+
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        let inner = self.inner.read().unwrap();
+        inner.tasks.is_empty()
     }
 
     #[allow(dead_code)]

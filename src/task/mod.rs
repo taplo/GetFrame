@@ -193,6 +193,7 @@ impl TaskManager {
         self.registry.list()
     }
 
+    #[allow(clippy::collapsible_if)]
     fn record_event(&self, task_id: TaskId, event_type: &str, event_data: Option<serde_json::Value>) {
         let pool = self.db_pool.clone();
         let et = event_type.to_string();

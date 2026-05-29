@@ -98,13 +98,13 @@ pub fn create_evaluator(config: &RuleConfig, time_base: (i32, i32)) -> Box<dyn R
 }
 
 pub fn has_scene_change_rule(configs: &[RuleConfig]) -> bool {
-    configs.iter().any(|c| matches_scene_change(c))
+    configs.iter().any(matches_scene_change)
 }
 
 fn matches_scene_change(config: &RuleConfig) -> bool {
     match config {
         RuleConfig::SceneChange { .. } => true,
-        RuleConfig::Composite { rules, .. } => rules.iter().any(|r| matches_scene_change(r)),
+        RuleConfig::Composite { rules, .. } => rules.iter().any(matches_scene_change),
         _ => false,
     }
 }
