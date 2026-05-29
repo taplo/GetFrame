@@ -36,7 +36,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             pkg-config libavcodec-dev libavformat-dev libavutil-dev \
             libswscale-dev libavdevice-dev libavfilter-dev \
-            libswresample-dev libpostproc-dev cmake clang libclang-dev
+            libswresample-dev libpostproc-dev cmake clang libclang-dev \
+            ffmpeg
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
