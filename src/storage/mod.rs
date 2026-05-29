@@ -161,3 +161,25 @@ impl StorageClient {
             retry_delays.len(), last_error))
     }
 }
+
+impl StorageClient {
+    #[allow(dead_code)]
+    pub fn noop() -> Self {
+        let config = Config::builder()
+            .endpoint_url("http://127.0.0.1:0")
+            .credentials_provider(Credentials::new("minio", "minio123", None, None, "test"))
+            .region(Region::new("us-east-1"))
+            .timeout_config(
+                TimeoutConfig::builder()
+                    .connect_timeout(std::time::Duration::from_secs(3))
+                    .read_timeout(std::time::Duration::from_secs(5))
+                    .build()
+            )
+            .build();
+        Self {
+            client: aws_sdk_s3::Client::from_conf(config),
+            bucket: "test-bucket".into(),
+            endpoint_url: None,
+        }
+    }
+}

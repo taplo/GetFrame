@@ -37,7 +37,7 @@ async fn build_test_app() -> axum::Router {
 
     let stream_manager = StreamManager::new(storage, kafka);
     let task_manager = Arc::new(TaskManager::new(Arc::new(stream_manager.clone()), None));
-    api::api_router(stream_manager, task_manager)
+    api::api_router(stream_manager, task_manager, None)
 }
 
 async fn body_to_json(body: Body) -> Value {

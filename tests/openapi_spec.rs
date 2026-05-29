@@ -44,7 +44,7 @@ async fn build_app() -> axum::Router {
 
     let health_state = health::HealthState::new(Some(Arc::new(stream_manager.registry().clone())));
     let health_router = health::health_router(health_state);
-    let api_router = api::api_router(stream_manager, task_manager);
+    let api_router = api::api_router(stream_manager, task_manager, None);
     let api_doc = getframe_worker::api::ApiDoc::openapi();
 
     health_router

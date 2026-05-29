@@ -169,3 +169,21 @@ impl KafkaProducer {
         Ok(wire_payload)
     }
 }
+
+impl KafkaProducer {
+    #[allow(dead_code)]
+    pub fn noop() -> Self {
+        let producer: rdkafka::producer::FutureProducer =
+            rdkafka::ClientConfig::new()
+                .set("bootstrap.servers", "127.0.0.1:1")
+                .set("message.timeout.ms", "1000")
+                .create()
+                .expect("Failed to create noop Kafka producer");
+        Self {
+            producer,
+            topic: "test".into(),
+            schema_registry_client: None,
+            schema_id: None,
+        }
+    }
+}

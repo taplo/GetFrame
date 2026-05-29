@@ -16,6 +16,7 @@ pub struct MetricsPoint {
 pub struct MetricsSnapshot {
     pub recorded_at: DateTime<Utc>,
     pub streams_active: i32,
+    #[allow(dead_code)]
     pub frames_delta: i32,
     pub frames_ps: f64,
     pub errors_decode: i32,

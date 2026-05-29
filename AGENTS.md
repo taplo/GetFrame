@@ -49,10 +49,17 @@
 ### Docker 构建注意事项
 
 - Cargo / Rust 工具链 **仅 Docker 内可用**，VM 宿主机无 rust/cargo
-- Docker 构建需要 `--network host` 才能访问外网下载 crates
 - 首次构建极慢（apt 包 238MB + 全部 crate 下载 + 编译），约 40-60 分钟
 - `.rs` 文件改动后必须 SCP 同步到 VM 再 `docker build`（git 仓库不同步）
 - VM 本地 `docker build` 用 `buildx` 驱动，不支持 `docker buildx build .` 的构建输出
+- VM 处于 VirtualBox NAT 下无法直接访问 GitHub（`utoipa-swagger-ui` build script 下载失败）：
+  - 方案一（当前环境适用）：通过 `--build-arg` 传入代理（仅 HTTPS，否则 HTTP 如 apt/deb.debian.org 被拦截）
+    ```
+    docker buildx build --network host \
+      --build-arg https_proxy=http://192.168.3.200:8787 \
+      -t getframe-worker:latest .
+    ```
+  - 方案二（CI/无代理环境）：预下载 zip 并通过 HTTP server 提供，参考对话记录
 
 ### 文件同步工作流
 

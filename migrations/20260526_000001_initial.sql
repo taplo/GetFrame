@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS streams (
-    id CHAR(36) PRIMARY KEY,
+    id BINARY(16) PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
     tags JSON NOT NULL,
@@ -17,9 +17,9 @@ CREATE TABLE IF NOT EXISTS streams (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS tasks (
-    id CHAR(36) PRIMARY KEY,
+    id BINARY(16) PRIMARY KEY,
     name TEXT NOT NULL,
-    stream_id CHAR(36) NOT NULL,
+    stream_id BINARY(16) NOT NULL,
     stream_name VARCHAR(255) NOT NULL,
     status VARCHAR(50) NOT NULL,
     rules JSON NOT NULL,

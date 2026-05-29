@@ -76,7 +76,7 @@ pub async fn upsert(pool: &MySqlPool, id: &StreamId, config: &StreamConfig) -> R
                rtsp_transport = VALUES(rtsp_transport),
                storage_config = VALUES(storage_config), kafka_config = VALUES(kafka_config)"#
     )
-    .bind(id.to_string())
+    .bind(id)
     .bind(&config.name)
     .bind(&config.description)
     .bind(tags)
@@ -96,7 +96,7 @@ pub async fn upsert(pool: &MySqlPool, id: &StreamId, config: &StreamConfig) -> R
 
 pub async fn delete(pool: &MySqlPool, id: &StreamId) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM streams WHERE id = ?")
-        .bind(id.to_string())
+    .bind(id)
         .execute(pool)
         .await?;
     Ok(())

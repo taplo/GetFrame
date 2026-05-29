@@ -58,9 +58,9 @@ pub async fn upsert(pool: &MySqlPool, task: &TaskInfo) -> Result<(), sqlx::Error
                frames_extracted = VALUES(frames_extracted),
                started_at = VALUES(started_at), stopped_at = VALUES(stopped_at)"#
     )
-    .bind(task.id.to_string())
+    .bind(task.id)
     .bind(&task.name)
-    .bind(task.stream_id.to_string())
+    .bind(task.stream_id)
     .bind(&task.stream_name)
     .bind(&status_str)
     .bind(rules)
@@ -75,7 +75,7 @@ pub async fn upsert(pool: &MySqlPool, task: &TaskInfo) -> Result<(), sqlx::Error
 
 pub async fn delete(pool: &MySqlPool, id: &TaskId) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM tasks WHERE id = ?")
-        .bind(id.to_string())
+        .bind(id)
         .execute(pool)
         .await?;
     Ok(())
