@@ -191,8 +191,46 @@ pub fn run_decode_pipeline(
         }
     }
 
+    // Flush decoder to release delayed frames (e.g. B-frames)
+    if let Err(e) = demuxed.decoder.send_eof() {
+        tracing::warn!(stream_id = %stream_id, error = %e, "Failed to send EOF to decoder");
+    } else {
+        let mut frame = ffmpeg::util::frame::Video::empty();
+        loop {
+            match demuxed.decoder.receive_frame(&mut frame) {
+                Ok(()) => {
+                    total_frames_decoded += 1;
+                    frames_decoded_counter.fetch_add(1, Ordering::Relaxed);
+                    let pts = frame.pts().unwrap_or(0);
+                    let is_key = frame.is_key();
+                    let decoded = DecodedFrame {
+                        stream_id,
+                        pts,
+                        time_base: (time_base.0, time_base.1),
+                        width: demuxed.width,
+                        height: demuxed.height,
+                        y_plane: frame.data(0).to_vec(),
+                        u_plane: frame.data(1).to_vec(),
+                        v_plane: frame.data(2).to_vec(),
+                        y_stride: frame.stride(0) as i32,
+                        u_stride: frame.stride(1) as i32,
+                        v_stride: frame.stride(2) as i32,
+                        is_keyframe: is_key,
+                        frame_number: total_frames_decoded - 1,
+                        scene_change_score: None,
+                    };
+                    pts_queue.insert(pts, decoded);
+                }
+                Err(ffmpeg::Error::Eof) => break,
+                Err(e) => {
+                    tracing::warn!(stream_id = %stream_id, error = %e, "Error receiving flushed frame");
+                    break;
+                }
+            }
+        }
+    }
+
     // Drain remaining frames
-    #[allow(clippy::collapsible_if)]
     while let Some((_, ready_frame)) = pts_queue.pop_first() {
         if rule_engine.evaluate(&ready_frame) {
             if let Ok(jpeg_bytes) = encode::encode_jpeg(&ready_frame, jpeg_quality) {
