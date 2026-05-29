@@ -62,9 +62,10 @@ async fn test_api_create_and_get_stream() {
     let created: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     let stream_id = created["id"].as_str().unwrap().to_string();
 
+    let uri = format!("/api/v1/streams/{}", stream_id);
     let response = app
         .oneshot(
-            Request::get(&format!("/api/v1/streams/{}", stream_id))
+            Request::get(&uri)
                 .body(Body::empty()).unwrap()
         )
         .await

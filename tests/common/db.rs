@@ -52,6 +52,7 @@ pub async fn setup_db() -> MySqlPool {
     pool
 }
 
+#[allow(dead_code)]
 pub async fn cleanup_tables(pool: &MySqlPool) {
     sqlx::query("DELETE FROM task_events")
         .execute(pool).await.ok();

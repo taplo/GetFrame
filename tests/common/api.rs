@@ -6,6 +6,7 @@ use getframe_worker::task::TaskManager;
 use getframe_worker::api::api_router;
 use getframe_worker::health::{health_router, HealthState};
 
+#[allow(dead_code)]
 pub fn test_app(pool: MySqlPool) -> Router {
     let storage = Arc::new(getframe_worker::storage::StorageClient::noop());
     let kafka = Arc::new(getframe_worker::kafka::KafkaProducer::noop());

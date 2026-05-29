@@ -130,7 +130,7 @@ async fn test_decode_pipeline_early_cancel() {
     });
 
     let mut count = 0;
-    while let Ok(_) = rx.recv_timeout(std::time::Duration::from_secs(5)) {
+    while rx.recv_timeout(std::time::Duration::from_secs(5)).is_ok() {
         count += 1;
         if count >= 2 {
             shutdown.cancel();
