@@ -37,7 +37,7 @@ jobs:
             pkg-config libavcodec-dev libavformat-dev libavutil-dev \
             libswscale-dev libavdevice-dev libavfilter-dev \
             libswresample-dev libpostproc-dev cmake clang libclang-dev \
-            ffmpeg
+            libssl-dev libcurl4-openssl-dev curl libzstd-dev ffmpeg
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

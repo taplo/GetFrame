@@ -10,3 +10,6 @@ build_*.txt
 cargo_*.txt
 check_sys.txt
 test.obj
+
+tmp_test_parallel*.txt
+docs/
