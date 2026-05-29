@@ -53,6 +53,7 @@ pub async fn load_all(pool: &MySqlPool) -> Result<Vec<(StreamId, StreamConfig)>,
                 storage,
                 kafka,
             },
+        )
     }).collect())
 }
 
