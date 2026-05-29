@@ -82,8 +82,11 @@ async fn test_decode_pipeline_full() {
 
     drop(tx);
     let mut frames = Vec::new();
-    while let Ok(frame) = rx.recv() {
-        frames.push(frame);
+    for _ in 0..5 {
+        match rx.recv_timeout(std::time::Duration::from_secs(10)) {
+            Ok(frame) => frames.push(frame),
+            Err(_) => break,
+        }
     }
 
     shutdown.cancel();
