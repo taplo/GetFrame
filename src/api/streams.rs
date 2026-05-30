@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json, Router,
 };
@@ -49,6 +49,13 @@ pub struct StreamListResponse {
 }
 
 #[derive(Deserialize, ToSchema)]
+pub struct StreamListQuery {
+    pub search: Option<String>,
+    pub status: Option<String>,
+    pub tags: Option<String>,
+}
+
+#[derive(Deserialize, ToSchema)]
 pub struct TestUrlRequest {
     pub url: String,
     pub source_type: Option<String>,
@@ -84,11 +91,32 @@ pub fn stream_routes(manager: StreamManager) -> Router {
 )]
 pub async fn list_streams(
     State(manager): State<StreamManager>,
+    Query(q): Query<StreamListQuery>,
 ) -> Json<StreamListResponse> {
     let streams = manager.registry().list();
-    let responses: Vec<StreamResponse> = streams.into_iter()
+    let mut responses: Vec<StreamResponse> = streams.into_iter()
         .map(to_response)
         .collect();
+
+    if let Some(ref search) = q.search {
+        let q = search.to_lowercase();
+        responses.retain(|s| s.name.to_lowercase().contains(&q) || s.source_url.to_lowercase().contains(&q));
+    }
+
+    if let Some(ref status) = q.status {
+        responses.retain(|s| s.status == *status);
+    }
+
+    if let Some(ref tags) = q.tags {
+        let required: Vec<&str> = tags.split(',').map(|t| t.trim()).filter(|t| !t.is_empty()).collect();
+        if !required.is_empty() {
+            responses.retain(|s| {
+                let keys: Vec<&str> = s.tags.keys().map(|k| k.as_str()).collect();
+                required.iter().all(|r| keys.contains(r))
+            });
+        }
+    }
+
     Json(StreamListResponse { streams: responses })
 }
 

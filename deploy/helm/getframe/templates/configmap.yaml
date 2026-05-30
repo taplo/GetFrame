@@ -20,6 +20,7 @@ data:
       topic: "{{ .Values.kafka.topic }}"
       acks: "{{ .Values.kafka.acks }}"
       compression: "{{ .Values.kafka.compression }}"
+      consumer_group: "{{ .Values.kafka.consumer_group }}"
       {{- if .Values.kafka.schema_registry_url }}
       schema_registry_url: "{{ .Values.kafka.schema_registry_url }}"
       {{- end }}

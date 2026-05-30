@@ -29,6 +29,7 @@ kafka:
   topic: "getframe-frames"                             # Target topic
   acks: "1"                                            # Producer acks: 0, 1, all
   compression: "zstd"                                  # none, gzip, snappy, lz4, zstd
+  consumer_group: "getframe-workers"                   # Consumer group for lag monitoring
 
 database:
   url: "mysql://getframe:getframe@localhost:3306/getframe"

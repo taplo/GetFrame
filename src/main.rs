@@ -189,6 +189,28 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("MetricsRecorder started (every 60s)");
     }
 
+    {
+        let kp = kafka_producer.clone();
+        let consumer_group = config.kafka.consumer_group.clone();
+        let shutdown = shutdown_token.child_token();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(std::time::Duration::from_secs(30));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    _ = shutdown.cancelled() => break,
+                    _ = tick.tick() => {
+                        let lag = kp.query_lag(&consumer_group, std::time::Duration::from_secs(10));
+                        if lag >= 0 {
+                            crate::metrics::KAFKA_LAG.set(lag as f64);
+                        }
+                    }
+                }
+            }
+        });
+        tracing::info!("Kafka lag monitor started (every 30s)");
+    }
+
     let health_router = health::health_router(health_state.clone());
     let api_router = api::api_router(stream_manager.clone(), task_manager, db_pool.clone());
     let api_doc = crate::api::ApiDoc::openapi();

@@ -12,6 +12,7 @@ kafka:
   topic: "getframe-frames"
   acks: "all"
   compression: "snappy"
+  consumer_group: "getframe-workers"
 
 database:
   url: "mysql://getframe:getframe@mysql:3306/getframe"

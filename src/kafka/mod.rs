@@ -2,6 +2,7 @@ pub mod schema;
 pub mod schema_registry;
 
 use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::consumer::{BaseConsumer, Consumer};
 use rdkafka::ClientConfig;
 use rdkafka::message::{Header, OwnedHeaders};
 use anyhow::Result;
@@ -14,6 +15,7 @@ use std::time::Duration;
 #[derive(Clone)]
 pub struct KafkaProducer {
     producer: FutureProducer,
+    brokers: String,
     topic: String,
     #[allow(dead_code)]
     schema_registry_client: Option<Arc<SchemaRegistryClient>>,
@@ -61,6 +63,7 @@ impl KafkaProducer {
 
         Ok(Self {
             producer,
+            brokers: config.brokers.clone(),
             topic: config.topic.clone(),
             schema_registry_client,
             schema_id,
@@ -168,6 +171,63 @@ impl KafkaProducer {
 
         Ok(wire_payload)
     }
+
+    pub fn query_lag(&self, consumer_group: &str, timeout: Duration) -> i64 {
+        let consumer: BaseConsumer = ClientConfig::new()
+            .set("bootstrap.servers", &self.brokers)
+            .set("group.id", consumer_group)
+            .set("session.timeout.ms", "6000")
+            .set("enable.auto.commit", "false")
+            .create()
+            .map_err(|e| {
+                tracing::warn!(error = %e, "Failed to create Kafka consumer for lag query");
+            })
+            .ok();
+
+        let consumer = match consumer {
+            Some(c) => c,
+            None => return -1,
+        };
+
+        let metadata = match consumer.fetch_metadata(Some(&self.topic), timeout) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!(error = %e, topic = %self.topic, "Failed to fetch Kafka metadata for lag");
+                return -1;
+            }
+        };
+
+        let mut total_lag: i64 = 0;
+        for topic in metadata.topics() {
+            for partition in topic.partitions() {
+                if partition.id() < 0 {
+                    continue;
+                }
+                let (_, high) = match consumer.fetch_watermarks(&self.topic, partition.id(), timeout) {
+                    Ok(w) => w,
+                    Err(_) => continue,
+                };
+
+                let mut tpl = rdkafka::topic_partition_list::TopicPartitionList::new();
+                tpl.add_partition(&self.topic, partition.id());
+                let committed = match consumer.committed_offsets(tpl, timeout) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+
+                let committed_offset = committed
+                    .elements()
+                    .first()
+                    .map(|e| e.offset().to_raw().unwrap_or(0))
+                    .unwrap_or(0);
+
+                let partition_lag = high.saturating_sub(committed_offset as i64);
+                total_lag += partition_lag;
+            }
+        }
+
+        total_lag
+    }
 }
 
 impl KafkaProducer {
@@ -181,6 +241,7 @@ impl KafkaProducer {
                 .expect("Failed to create noop Kafka producer");
         Self {
             producer,
+            brokers: "127.0.0.1:1".into(),
             topic: "test".into(),
             schema_registry_client: None,
             schema_id: None,

@@ -167,12 +167,15 @@ impl StreamManager {
                                         ).await {
                                             tracing::error!(error = %e, stream_id = %sid, "Metadata publish failed");
                                             crate::metrics::KAFKA_ERRORS.increment(1);
+                                            crate::metrics::kafka_errors(&sid.to_string());
                                         }
                                         crate::metrics::FRAMES_PROCESSED.increment(1);
+                                        crate::metrics::frames_processed(&sid.to_string());
                                     }
                                     Err(e) => {
                                         tracing::error!(error = %e, stream_id = %sid, "Upload failed");
                                         crate::metrics::STORAGE_ERRORS.increment(1);
+                                        crate::metrics::storage_errors(&sid.to_string());
                                     }
                                 }
                             }
@@ -303,12 +306,15 @@ impl StreamManager {
                                                 ).await {
                                                     tracing::error!(error = %e, stream_id = %sid, "Kafka failed");
                                                     crate::metrics::KAFKA_ERRORS.increment(1);
+                                                    crate::metrics::kafka_errors(&sid.to_string());
                                                 }
                                                 crate::metrics::FRAMES_PROCESSED.increment(1);
+                                                crate::metrics::frames_processed(&sid.to_string());
                                             }
                                             Err(e) => {
                                                 tracing::error!(error = %e, stream_id = %sid, "Upload failed");
                                                 crate::metrics::STORAGE_ERRORS.increment(1);
+                                                crate::metrics::storage_errors(&sid.to_string());
                                             }
                                         }
                                     }

@@ -27,6 +27,9 @@ pub static CLAIMED_STREAMS: LazyLock<metrics::Gauge> = LazyLock::new(|| {
 pub static CLAIM_ERRORS: LazyLock<metrics::Counter> = LazyLock::new(|| {
     counter!("getframe_claim_errors_total")
 });
+pub static KAFKA_LAG: LazyLock<metrics::Gauge> = LazyLock::new(|| {
+    gauge!("getframe_kafka_lag")
+});
 
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 static PROMETHEUS_HANDLE: LazyLock<PrometheusHandle> = LazyLock::new(|| {
@@ -34,6 +37,22 @@ static PROMETHEUS_HANDLE: LazyLock<PrometheusHandle> = LazyLock::new(|| {
         .install_recorder()
         .expect("Failed to install Prometheus recorder")
 });
+
+pub fn frames_processed(stream_id: &str) {
+    counter!("getframe_frames_processed_total", "stream_id" => stream_id.to_string()).increment(1);
+}
+
+pub fn decode_errors(stream_id: &str) {
+    counter!("getframe_decode_errors_total", "stream_id" => stream_id.to_string()).increment(1);
+}
+
+pub fn storage_errors(stream_id: &str) {
+    counter!("getframe_storage_errors_total", "stream_id" => stream_id.to_string()).increment(1);
+}
+
+pub fn kafka_errors(stream_id: &str) {
+    counter!("getframe_kafka_errors_total", "stream_id" => stream_id.to_string()).increment(1);
+}
 
 pub async fn metrics_handler() -> String {
     PROMETHEUS_HANDLE.render()

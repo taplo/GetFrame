@@ -94,7 +94,11 @@ pub struct KafkaConfig {
     pub schema_registry_url: Option<String>,
     #[serde(default)]
     pub partition_key_field: Option<String>,
+    #[serde(default = "default_kafka_consumer_group")]
+    pub consumer_group: String,
 }
+
+fn default_kafka_consumer_group() -> String { "getframe-workers".into() }
 
 fn default_kafka_acks() -> String { "all".into() }
 fn default_kafka_compression() -> String { "zstd".into() }

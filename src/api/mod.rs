@@ -54,6 +54,7 @@ use crate::task::TaskManager;
         crate::api::streams::StreamListResponse,
         crate::api::streams::TestUrlRequest,
         crate::api::streams::TestUrlResponse,
+        crate::api::streams::StreamListQuery,
         crate::api::rules::RulesResponse,
         crate::api::rules::CreateRuleRequest,
         crate::api::rules::UpdateRuleRequest,
