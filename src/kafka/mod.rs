@@ -218,7 +218,7 @@ impl KafkaProducer {
                     .map(|e| e.offset().to_raw().unwrap_or(0))
                     .unwrap_or(0);
 
-                let partition_lag = high.saturating_sub(committed_offset as i64);
+                let partition_lag = high.saturating_sub(committed_offset);
                 total_lag += partition_lag;
             }
         }
