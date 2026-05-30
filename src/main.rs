@@ -107,7 +107,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let stream_manager = {
-        let mut sm = stream::StreamManager::new(storage_client, kafka_producer);
+        let mut sm = stream::StreamManager::new(storage_client, kafka_producer.clone());
         if let Some(ref pool) = db_pool {
             sm = sm.with_db(pool.clone());
         }
