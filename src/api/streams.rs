@@ -48,9 +48,26 @@ pub struct StreamListResponse {
     pub streams: Vec<StreamResponse>,
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct TestUrlRequest {
+    pub url: String,
+    pub source_type: Option<String>,
+    pub rtsp_transport: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct TestUrlResponse {
+    pub reachable: bool,
+    pub latency_ms: u64,
+    pub detected_type: Option<String>,
+    pub error: Option<String>,
+    pub message: String,
+}
+
 pub fn stream_routes(manager: StreamManager) -> Router {
     Router::new()
         .route("/", axum::routing::get(list_streams).post(create_stream))
+        .route("/test-url", axum::routing::post(test_url))
         .route("/{id}", axum::routing::get(get_stream).put(update_stream).delete(delete_stream))
         .route("/{id}/test", axum::routing::post(test_connection))
         .route("/{id}/frames/latest", axum::routing::get(get_latest_frame))
@@ -87,10 +104,32 @@ pub async fn list_streams(
 pub async fn create_stream(
     State(manager): State<StreamManager>,
     Json(req): Json<CreateStreamRequest>,
-) -> (StatusCode, Json<StreamResponse>) {
-    let id = manager.add_stream(req.config);
+) -> Result<(StatusCode, Json<StreamResponse>), (StatusCode, Json<serde_json::Value>)> {
+    let mut config = req.config;
+
+    if config.source_type.is_empty() {
+        config.source_type = detect_source_type(&config.source_url).to_string();
+    }
+
+    match probe_url(&config.source_url, &config.source_type, &config.rtsp_transport).await {
+        Ok(latency_ms) => {
+            tracing::info!(url = %config.source_url, type = %config.source_type, latency_ms, "URL validated before stream creation");
+        }
+        Err(e) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": format!("URL unreachable: {}", e),
+                    "source_url": config.source_url,
+                    "message": "Connection test failed before creating stream"
+                })),
+            ));
+        }
+    }
+
+    let id = manager.add_stream(config);
     let info = manager.registry().get(&id).unwrap();
-    (StatusCode::CREATED, Json(to_response(info)))
+    Ok((StatusCode::CREATED, Json(to_response(info))))
 }
 
 #[utoipa::path(
@@ -137,7 +176,31 @@ pub async fn update_stream(
     if !registry.exists(&id) {
         return Err(not_found(id));
     }
-    manager.update_stream_config(&id, req.config);
+
+    let mut config = req.config;
+    if config.source_type.is_empty() {
+        config.source_type = detect_source_type(&config.source_url).to_string();
+    }
+
+    let existing = registry.get(&id).unwrap();
+    if config.source_url != existing.config.source_url {
+        match probe_url(&config.source_url, &config.source_type, &config.rtsp_transport).await {
+            Ok(latency_ms) => {
+                tracing::info!(url = %config.source_url, latency_ms, "URL validated before stream update");
+            }
+            Err(e) => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": format!("New URL unreachable: {}", e),
+                        "source_url": config.source_url,
+                    })),
+                ));
+            }
+        }
+    }
+
+    manager.update_stream_config(&id, config);
     let info = registry.get(&id).unwrap();
     Ok(Json(to_response(info)))
 }
@@ -268,6 +331,81 @@ pub async fn get_latest_frame(
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": format!("Frame not found: {}", e)})),
         )),
+    }
+}
+
+fn detect_source_type(url: &str) -> &str {
+    if url.starts_with("rtsp://") || url.starts_with("rtsps://") {
+        "rtsp"
+    } else if url.starts_with("rtmp://") || url.starts_with("rtmps://") {
+        "rtmp"
+    } else if url.ends_with(".m3u8") || url.starts_with("hls://") {
+        "hls"
+    } else {
+        "rtsp"
+    }
+}
+
+async fn probe_url(url: &str, source_type: &str, rtsp_transport: &str) -> Result<u64, String> {
+    let url = url.to_string();
+    let source_type = source_type.to_string();
+    let rtsp_transport = rtsp_transport.to_string();
+    let start = std::time::Instant::now();
+
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        tokio::task::spawn_blocking(move || {
+            let mut opts = ffmpeg_next::Dictionary::new();
+            if source_type == "rtsp" {
+                opts.set("rtsp_transport", &rtsp_transport);
+            }
+            opts.set("analyzeduration", "3000000");
+            opts.set("probesize", "3000000");
+            ffmpeg_next::format::input_with_dictionary(&url, opts).map(|_| ())
+        }),
+    ).await;
+
+    match result {
+        Ok(Ok(Ok(()))) => Ok(start.elapsed().as_millis() as u64),
+        Ok(Ok(Err(e))) => Err(e.to_string()),
+        Ok(Err(_)) => Err("Internal error: spawn blocking task failed".to_string()),
+        Err(_) => Err("Connection timed out after 10 seconds".to_string()),
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/streams/test-url",
+    tag = "streams",
+    request_body = TestUrlRequest,
+    responses(
+        (status = 200, description = "URL test result", body = TestUrlResponse),
+    )
+)]
+pub async fn test_url(
+    State(manager): State<StreamManager>,
+    Json(req): Json<TestUrlRequest>,
+) -> Json<TestUrlResponse> {
+    let source_type = req.source_type
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| detect_source_type(&req.url).to_string());
+    let rtsp_transport = req.rtsp_transport.unwrap_or_else(|| "tcp".to_string());
+
+    match probe_url(&req.url, &source_type, &rtsp_transport).await {
+        Ok(latency_ms) => Json(TestUrlResponse {
+            reachable: true,
+            latency_ms,
+            detected_type: Some(source_type),
+            error: None,
+            message: "Connection successful".to_string(),
+        }),
+        Err(e) => Json(TestUrlResponse {
+            reachable: false,
+            latency_ms: 0,
+            detected_type: Some(source_type),
+            error: Some(e.clone()),
+            message: e,
+        }),
     }
 }
 

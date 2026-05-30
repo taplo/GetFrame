@@ -1,6 +1,20 @@
 import { request } from "./client"
 import type { StreamInfo, StreamConfig, CreateStreamRequest } from "@/types/stream"
 
+export interface TestUrlResult {
+  reachable: boolean
+  latency_ms: number
+  detected_type: string | null
+  error: string | null
+  message: string
+}
+
+export interface TestUrlRequest {
+  url: string
+  source_type?: string
+  rtsp_transport?: string
+}
+
 export const streamsApi = {
   list: (params?: { status?: string; search?: string }) => {
     const qs = new URLSearchParams()
@@ -22,6 +36,6 @@ export const streamsApi = {
     }),
   delete: (id: string) =>
     request<void>(`/streams/${id}`, { method: "DELETE" }),
-  testConnection: (url: string) =>
-    request<{ reachable: boolean }>("/streams/test", { method: "POST", body: JSON.stringify({ url }) }),
+  testConnection: (params: TestUrlRequest) =>
+    request<TestUrlResult>("/streams/test-url", { method: "POST", body: JSON.stringify(params) }),
 }

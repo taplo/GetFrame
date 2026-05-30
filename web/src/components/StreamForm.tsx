@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { streamsApi } from "@/api/streams"
 import type { StreamInfo, StreamConfig } from "@/types/stream"
 
@@ -20,6 +20,39 @@ export function StreamForm({ stream, onClose, onSave }: StreamFormProps) {
   const [description, setDescription] = useState(stream?.description ?? "")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
+  const [testing, setTesting] = useState(false)
+  const [testOk, setTestOk] = useState(false)
+  const [testMsg, setTestMsg] = useState("")
+
+  const handleTest = useCallback(async () => {
+    if (!url.trim()) return
+    setTesting(true)
+    setTestOk(false)
+    setTestMsg("")
+    try {
+      const res = await streamsApi.testConnection({
+        url: url.trim(),
+        source_type: sourceType || undefined,
+        rtsp_transport: "tcp",
+      })
+      setTestOk(res.reachable)
+      setTestMsg(res.message + (res.latency_ms ? ` (${res.latency_ms}ms)` : ""))
+      if (res.detected_type && !sourceType) {
+        setSourceType(res.detected_type)
+      }
+    } catch (err) {
+      setTestOk(false)
+      setTestMsg(err instanceof Error ? err.message : "Connection test failed")
+    } finally {
+      setTesting(false)
+    }
+  }, [url, sourceType])
+
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUrl(e.target.value)
+    setTestOk(false)
+    setTestMsg("")
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,7 +90,18 @@ export function StreamForm({ stream, onClose, onSave }: StreamFormProps) {
           </div>
           <div>
             <label className="text-sm font-medium block mb-1">URL</label>
-            <input required value={url} onChange={(e) => setUrl(e.target.value)} className="border rounded-lg px-3 py-1.5 w-full text-sm" placeholder="rtsp://..." />
+            <div className="flex gap-2">
+              <input required value={url} onChange={handleUrlChange} className="border rounded-lg px-3 py-1.5 w-full text-sm" placeholder="rtsp://..." />
+              <button type="button" onClick={handleTest} disabled={testing || !url.trim()}
+                className="shrink-0 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50">
+                {testing ? "检测中..." : "检测"}
+              </button>
+            </div>
+            {testMsg && (
+              <p className={`text-xs mt-1 ${testOk ? "text-green-600" : "text-red-600"}`}>
+                {testOk ? "✓ " : "✗ "}{testMsg}
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
