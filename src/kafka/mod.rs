@@ -173,7 +173,7 @@ impl KafkaProducer {
     }
 
     pub fn query_lag(&self, consumer_group: &str, timeout: Duration) -> i64 {
-        let consumer: BaseConsumer = ClientConfig::new()
+        let consumer = ClientConfig::new()
             .set("bootstrap.servers", &self.brokers)
             .set("group.id", consumer_group)
             .set("session.timeout.ms", "6000")
