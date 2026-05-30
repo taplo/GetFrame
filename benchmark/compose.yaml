@@ -1,0 +1,27 @@
+# benchmark/compose.yaml
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: getframe-bench-mediamtx
+    restart: unless-stopped
+    ports:
+      - "8554:8554"
+    networks:
+      - bench-net
+
+  worker:
+    image: getframe-worker:latest
+    container_name: getframe-bench-worker
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config/worker.yaml:/etc/getframe/config.yaml:ro
+    depends_on:
+      - mediamtx
+    networks:
+      - bench-net
+
+networks:
+  bench-net:
+    driver: bridge
