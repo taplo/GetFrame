@@ -173,20 +173,17 @@ impl KafkaProducer {
     }
 
     pub fn query_lag(&self, consumer_group: &str, timeout: Duration) -> i64 {
-        let consumer = ClientConfig::new()
+        let consumer = match ClientConfig::new()
             .set("bootstrap.servers", &self.brokers)
             .set("group.id", consumer_group)
             .set("session.timeout.ms", "6000")
             .set("enable.auto.commit", "false")
-            .create()
+            .create::<BaseConsumer>()
             .map_err(|e| {
                 tracing::warn!(error = %e, "Failed to create Kafka consumer for lag query");
-            })
-            .ok();
-
-        let consumer = match consumer {
-            Some(c) => c,
-            None => return -1,
+            }) {
+            Ok(c) => c,
+            Err(_) => return -1,
         };
 
         let metadata = match consumer.fetch_metadata(Some(&self.topic), timeout) {
