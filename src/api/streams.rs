@@ -383,7 +383,7 @@ async fn probe_url(url: &str, source_type: &str, rtsp_transport: &str) -> Result
     )
 )]
 pub async fn test_url(
-    State(manager): State<StreamManager>,
+    State(_manager): State<StreamManager>,
     Json(req): Json<TestUrlRequest>,
 ) -> Json<TestUrlResponse> {
     let source_type = req.source_type
