@@ -11,10 +11,12 @@ services:
     volumes:
       - mysqldata:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u getframe -pgetframe"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -proot"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 15
+    networks:
+      - getframe-net
 
   kafka:
     image: confluentinc/cp-kafka:latest
@@ -30,11 +32,16 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    ports:
+      - "9092:9092"
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
+    networks:
+      - getframe-net
 
   minio:
     image: minio/minio
@@ -51,24 +58,61 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+    networks:
+      - getframe-net
+
+  init-bucket:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set local http://minio:9000 getframe getframe123 &&
+      /usr/bin/mc mb local/getframe-frames --ignore-existing &&
+      echo 'Bucket ready: getframe-frames'
+      "
+    networks:
+      - getframe-net
+
+  init-kafka-topics:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      kafka-topics --bootstrap-server kafka:9092 --topic getframe-frames --create --if-not-exists &&
+      echo 'Topic ready: getframe-frames'
+      "
+    networks:
+      - getframe-net
 
   worker:
     image: getframe-worker:latest
+    build:
+      context: .
+      args:
+        https_proxy: ""
     depends_on:
-      mysql:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
+      init-bucket:
+        condition: service_completed_successfully
+      init-kafka-topics:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
     volumes:
       - ./config.docker.yaml:/etc/getframe/config.yaml
       - ./samples:/samples
     restart: unless-stopped
+    networks:
+      - getframe-net
 
 volumes:
   mysqldata:
   miniodata:
+
+networks:
+  getframe-net:
+    driver: bridge
