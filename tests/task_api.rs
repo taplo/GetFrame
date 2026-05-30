@@ -30,6 +30,7 @@ async fn build_test_app() -> axum::Router {
         topic: "test-topic".into(),
         acks: "all".into(),
         compression: "none".into(),
+        consumer_group: "test-group".into(),
         schema_registry_url: None,
         partition_key_field: None,
     };
