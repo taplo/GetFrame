@@ -111,19 +111,21 @@ pub async fn create_stream(
         config.source_type = detect_source_type(&config.source_url).to_string();
     }
 
-    match probe_url(&config.source_url, &config.source_type, &config.rtsp_transport).await {
-        Ok(latency_ms) => {
-            tracing::info!(url = %config.source_url, type = %config.source_type, latency_ms, "URL validated before stream creation");
-        }
-        Err(e) => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({
-                    "error": format!("URL unreachable: {}", e),
-                    "source_url": config.source_url,
-                    "message": "Connection test failed before creating stream"
-                })),
-            ));
+    if config.source_type != "file" {
+        match probe_url(&config.source_url, &config.source_type, &config.rtsp_transport).await {
+            Ok(latency_ms) => {
+                tracing::info!(url = %config.source_url, type = %config.source_type, latency_ms, "URL validated before stream creation");
+            }
+            Err(e) => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": format!("URL unreachable: {}", e),
+                        "source_url": config.source_url,
+                        "message": "Connection test failed before creating stream"
+                    })),
+                ));
+            }
         }
     }
 
@@ -183,7 +185,7 @@ pub async fn update_stream(
     }
 
     let existing = registry.get(&id).unwrap();
-    if config.source_url != existing.config.source_url {
+    if config.source_url != existing.config.source_url && config.source_type != "file" {
         match probe_url(&config.source_url, &config.source_type, &config.rtsp_transport).await {
             Ok(latency_ms) => {
                 tracing::info!(url = %config.source_url, latency_ms, "URL validated before stream update");
