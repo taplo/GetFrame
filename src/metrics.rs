@@ -42,6 +42,7 @@ pub fn frames_processed(stream_id: &str) {
     counter!("getframe_frames_processed_total", "stream_id" => stream_id.to_string()).increment(1);
 }
 
+#[allow(dead_code)]
 pub fn decode_errors(stream_id: &str) {
     counter!("getframe_decode_errors_total", "stream_id" => stream_id.to_string()).increment(1);
 }
