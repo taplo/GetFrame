@@ -39,12 +39,11 @@ pub fn open_video_source(
     anyhow::ensure!(codec_id != ffmpeg::codec::Id::None, "Unknown codec in video stream");
 
     let mut decoder_ctx = ffmpeg::codec::Context::from_parameters(video_stream.parameters())?;
-    #[allow(clippy::struct_update_has_no_effect)]
-    decoder_ctx.set_threading(ffmpeg::codec::threading::Config {
-        kind: ffmpeg::codec::threading::Type::Frame,
-        count: ffmpeg_threads as usize,
-        ..Default::default()
-    });
+    {
+        let mut tc = ffmpeg::codec::threading::Config::kind(ffmpeg::codec::threading::Type::Frame);
+        tc.count = ffmpeg_threads as usize;
+        decoder_ctx.set_threading(tc);
+    }
 
     let codec = ffmpeg::codec::decoder::find(codec_id)
         .ok_or_else(|| anyhow::anyhow!("No decoder found for codec: {:?}", codec_id))?;
