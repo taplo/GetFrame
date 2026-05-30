@@ -1,0 +1,149 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus data source for GetFrame metrics",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
+    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
+    { "type": "panel", "id": "table", "name": "Table", "version": "" }
+  ],
+  "title": "GetFrame — Video Frame Extraction Platform",
+  "tags": ["getframe", "video", "frame-extraction"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "refresh": 1,
+        "current": { "selected": true }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "Active Streams",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "getframe_streams_active", "legendFormat": "", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 150 },
+            { "color": "red", "value": 200 }
+          ]},
+          "unit": "none"
+        }
+      }
+    },
+    {
+      "title": "Total Streams Created",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "targets": [
+        { "expr": "getframe_streams_total", "legendFormat": "", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }, "unit": "none" }
+      }
+    },
+    {
+      "title": "Frames Processed",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "targets": [
+        { "expr": "rate(getframe_frames_processed_total[5m])", "legendFormat": "fps", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] }, "unit": "fps" }
+      }
+    },
+    {
+      "title": "Claimed Streams",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "getframe_streams_claimed", "legendFormat": "", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }, "unit": "none" }
+      }
+    },
+    {
+      "title": "Error Rate",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "targets": [
+        { "expr": "rate(getframe_decode_errors_total[5m]) + rate(getframe_storage_errors_total[5m]) + rate(getframe_kafka_errors_total[5m])", "legendFormat": "errors/s", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "unit": "none" }
+      }
+    },
+    {
+      "title": "Frames per Second",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        { "expr": "rate(getframe_frames_processed_total[$__rate_interval])", "legendFormat": "fps", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "fps", "custom": { "showPoints": "never" } }
+      }
+    },
+    {
+      "title": "Error Breakdown",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        { "expr": "rate(getframe_decode_errors_total[$__rate_interval])", "legendFormat": "decode", "refId": "A" },
+        { "expr": "rate(getframe_storage_errors_total[$__rate_interval])", "legendFormat": "storage", "refId": "B" },
+        { "expr": "rate(getframe_kafka_errors_total[$__rate_interval])", "legendFormat": "kafka", "refId": "C" },
+        { "expr": "rate(getframe_claim_errors_total[$__rate_interval])", "legendFormat": "claim", "refId": "D" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none", "custom": { "showPoints": "never" } }
+      }
+    },
+    {
+      "title": "Active & Claimed Streams",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        { "expr": "getframe_streams_active", "legendFormat": "active", "refId": "A" },
+        { "expr": "getframe_streams_claimed", "legendFormat": "claimed", "refId": "B" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none", "custom": { "showPoints": "never" } }
+      }
+    },
+    {
+      "title": "Total Frames (Cumulative)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        { "expr": "getframe_frames_processed_total", "legendFormat": "total frames", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none", "custom": { "showPoints": "never" } }
+      }
+    }
+  ]
+}

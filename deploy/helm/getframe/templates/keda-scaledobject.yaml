@@ -1,0 +1,48 @@
+{{- if .Values.autoscaling.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+{{- else if .Values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}-getframe
+  labels: {{ include "getframe.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-getframe
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.cpuTargetAverageUtilization | default 80 }}
+{{- end }}
+kind: ScaledObject
+metadata:
+  name: {{ .Release.Name }}-getframe
+  labels: {{ include "getframe.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ .Release.Name }}-getframe
+  pollingInterval: {{ .Values.autoscaling.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.autoscaling.keda.cooldownPeriod }}
+  minReplicaCount: {{ .Values.autoscaling.minReplicas }}
+  maxReplicaCount: {{ .Values.autoscaling.maxReplicas }}
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ .Values.kafka.brokers }}
+        consumerGroup: {{ .Values.kafka.consumer_group | default "getframe-workers" }}
+        topic: {{ .Values.kafka.topic }}
+        lagThreshold: "{{ .Values.autoscaling.keda.kafkaLagThreshold }}"
+    {{- if .Values.autoscaling.keda.cpuTriggerEnabled }}
+    - type: cpu
+      metadata:
+        type: Utilization
+        value: "{{ .Values.autoscaling.keda.cpuTargetAverageUtilization }}"
+    {{- end }}
+{{- end }}

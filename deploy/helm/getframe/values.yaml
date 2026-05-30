@@ -1,0 +1,71 @@
+# Default values for getframe Helm chart
+# This is a YAML-formatted file.
+
+replicaCount: 1
+
+image:
+  repository: getframe-worker
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+http:
+  bind_address: "0.0.0.0"
+  bind_port: 8080
+
+storage:
+  bucket: "getframe-frames"
+  endpoint_url: "http://minio:9000"
+  region: "us-east-1"
+  access_key_id: "getframe"
+  secret_access_key: "getframe123"
+  retention_days: 7
+
+kafka:
+  brokers: "kafka:9092"
+  topic: "getframe-frames"
+  consumer_group: "getframe-workers"
+  acks: "all"
+  compression: "snappy"
+  schema_registry_url: ""
+
+database:
+  url: "mysql://getframe:getframe@mysql:3306/getframe"
+  max_connections: 10
+
+worker:
+  heartbeat_interval_secs: 15
+  claim_batch_size: 5
+  claim_timeout_secs: 30
+
+logging:
+  level: "info"
+  json: true
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  cpuTargetAverageUtilization: 80
+  keda:
+    enabled: false
+    pollingInterval: 30
+    cooldownPeriod: 300
+    kafkaLagThreshold: "100"
+    cpuTriggerEnabled: false
+    cpuTargetAverageUtilization: "80"
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "512Mi"
+  limits:
+    cpu: "1"
+    memory: "1Gi"
+
+nodeSelector: {}
+tolerations: []
+affinity: []

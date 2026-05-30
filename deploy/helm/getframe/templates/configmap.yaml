@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-getframe-config
+  labels: {{ include "getframe.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    preload_streams: []
+
+    storage:
+      bucket: "{{ .Values.storage.bucket }}"
+      endpoint_url: "{{ .Values.storage.endpoint_url }}"
+      region: "{{ .Values.storage.region }}"
+      access_key_id: "{{ .Values.storage.access_key_id }}"
+      secret_access_key: "{{ .Values.storage.secret_access_key }}"
+      retention_days: {{ .Values.storage.retention_days }}
+
+    kafka:
+      brokers: "{{ .Values.kafka.brokers }}"
+      topic: "{{ .Values.kafka.topic }}"
+      acks: "{{ .Values.kafka.acks }}"
+      compression: "{{ .Values.kafka.compression }}"
+      {{- if .Values.kafka.schema_registry_url }}
+      schema_registry_url: "{{ .Values.kafka.schema_registry_url }}"
+      {{- end }}
+
+    database:
+      url: "{{ .Values.database.url }}"
+      max_connections: {{ .Values.database.max_connections }}
+
+    worker:
+      id: ""
+      heartbeat_interval_secs: {{ .Values.worker.heartbeat_interval_secs }}
+      claim_batch_size: {{ .Values.worker.claim_batch_size }}
+      claim_timeout_secs: {{ .Values.worker.claim_timeout_secs }}
+
+    http:
+      bind_address: "{{ .Values.http.bind_address }}"
+      bind_port: {{ .Values.http.bind_port }}
+
+    logging:
+      level: "{{ .Values.logging.level }}"
+      json: {{ .Values.logging.json }}

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: getframe
+description: High-performance video frame extraction platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/taplo/GetFrame
+sources:
+  - https://github.com/taplo/GetFrame
+keywords:
+  - video
+  - frame-extraction
+  - ffmpeg
+  - kafka
+maintainers:
+  - name: GetFrame Team
+    email: team@getframe.example.com

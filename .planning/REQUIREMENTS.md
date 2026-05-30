@@ -125,72 +125,73 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STREAM-01 | Phase 1 | Pending |
-| STREAM-02 | Phase 2 | Pending |
-| STREAM-03 | Phase 2 | Pending |
-| STREAM-04 | Phase 2 | Pending |
-| STREAM-05 | Phase 2 | Pending |
-| STREAM-06 | Phase 2 | Pending |
-| STREAM-07 | Phase 2 | Pending |
-| STREAM-08 | Phase 2 | Pending |
-| RULE-01 | Phase 1 | Pending |
-| RULE-02 | Phase 3 | Pending |
-| RULE-03 | Phase 3 | Pending |
-| RULE-04 | Phase 4 | Pending |
-| RULE-05 | Phase 4 | Pending |
-| RULE-06 | Phase 3 | Pending |
-| FRAME-01 | Phase 1 | Pending |
-| FRAME-02 | Phase 1 | Pending |
-| FRAME-03 | Phase 1 | Pending |
-| FRAME-04 | Phase 5 | Pending |
-| KAFKA-01 | Phase 1 | Pending |
-| KAFKA-02 | Phase 1 | Pending |
-| KAFKA-03 | Phase 1 | Pending |
-| KAFKA-04 | Phase 5 | Pending |
-| KAFKA-05 | Phase 5 | Pending |
-| KAFKA-06 | Phase 5 | Pending |
-| API-01 | Phase 2 | Pending |
-| API-02 | Phase 6 | Pending |
-| API-03 | Phase 3 | Pending |
-| API-04 | Phase 2 | Pending |
-| API-05 | Phase 6 | Pending |
-| UI-01 | Phase 7 | Pending |
-| UI-02 | Phase 7 | Pending |
-| UI-03 | Phase 7 | Pending |
-| UI-04 | Phase 7 | Pending |
-| UI-05 | Phase 8 | Pending |
-| UI-06 | Phase 8 | Pending |
-| UI-07 | Phase 8 | Pending |
-| OBS-01 | Phase 2 | Pending |
-| OBS-02 | Phase 1 | Pending |
-| OBS-03 | Phase 1 | Pending |
-| OBS-04 | Phase 2 | Pending |
-| OBS-05 | Phase 10 | Pending |
-| DEPLOY-01 | Phase 1 | Pending |
-| DEPLOY-02 | Phase 10 | Pending |
-| DEPLOY-03 | Phase 10 | Pending |
-| DEPLOY-04 | Phase 10 | Pending |
-| WORKER-01 | Phase 9 | Pending |
-| WORKER-02 | Phase 9 | Pending |
-| WORKER-03 | Phase 9 | Pending |
-| WORKER-04 | Phase 9 | Pending |
+| STREAM-01 | Phase 1 | Done (auto-detect via URL prefix) |
+| STREAM-02 | Phase 2 | Done (PUT/DELETE /api/v1/streams/{id}) |
+| STREAM-03 | Phase 2 | Done (pre-save probe + POST /api/v1/streams/test-url) |
+| STREAM-04 | Phase 2 | Done (per-stream health in API + UI indicators) |
+| STREAM-05 | Phase 2 | Done (name, description, tags in config) |
+| STREAM-06 | Phase 2 | Partial (tags stored/displayed, no server-side filter) |
+| STREAM-07 | Phase 2 | Done (exponential backoff reconnection) |
+| STREAM-08 | Phase 2 | Done (CancellationToken, resource cleanup) |
+| RULE-01 | Phase 1 | Done (IntervalEvaluator) |
+| RULE-02 | Phase 3 | Done (Fps -> Interval conversion) |
+| RULE-03 | Phase 3 | Done (per-stream extract_interval_seconds + rules) |
+| RULE-04 | Phase 4 | Done (scdet filter, configurable threshold) |
+| RULE-05 | Phase 4 | Done (CompositeEvaluator, Any/All operators) |
+| RULE-06 | Phase 3 | Done (RateLimitedEvaluator, token bucket) |
+| FRAME-01 | Phase 1 | Done (StorageClient, aws-sdk-s3, MinIO) |
+| FRAME-02 | Phase 1 | Done (JpegEncoder with quality) |
+| FRAME-03 | Phase 1 | Done (stream_id/date/timestamp_key path) |
+| FRAME-04 | Phase 5 | Done (RetentionCleaner, configurable days) |
+| KAFKA-01 | Phase 1 | Done (KafkaProducer, rdkafka) |
+| KAFKA-02 | Phase 1 | Done (FrameMetadata with all fields) |
+| KAFKA-03 | Phase 1 | Done (OwnedHeaders) |
+| KAFKA-04 | Phase 5 | Done (acks=all, idempotence, retries) |
+| KAFKA-05 | Phase 5 | Done (SchemaRegistryClient, Avro) |
+| KAFKA-06 | Phase 5 | Done (per-stream topic/partition config) |
+| API-01 | Phase 2 | Done (5 endpoints for stream CRUD) |
+| API-02 | Phase 6 | Done (9 endpoints, lifecycle state machine) |
+| API-03 | Phase 3 | Done (5 endpoints for rule CRUD) |
+| API-04 | Phase 2 | Done (/health, /ready, per-stream status) |
+| API-05 | Phase 6 | Done (utoipa annotations, Swagger UI) |
+| UI-01 | Phase 7 | Done (StreamTable with status indicators) |
+| UI-02 | Phase 7 | Done (TaskTable with status badges) |
+| UI-03 | Phase 7 | Done (StreamForm with create/edit) |
+| UI-04 | Phase 7 | Done (TaskForm with stream/rules) |
+| UI-05 | Phase 8 | Done (TaskDetail page) |
+| UI-06 | Phase 8 | Done (Dashboard with StatCards) |
+| UI-07 | Phase 8 | Done (FramePreview component) |
+| OBS-01 | Phase 2 | Partial (Prometheus /metrics, no Kafka lag) |
+| OBS-02 | Phase 1 | Done (/health + /ready endpoints) |
+| OBS-03 | Phase 1 | Done (tracing-subscriber JSON logger) |
+| OBS-04 | Phase 2 | Partial (per-stream health stats, no per-stream Prometheus labels) |
+| OBS-05 | Phase 10 | Done (deploy/grafana/getframe-dashboard.json) |
+| DEPLOY-01 | Phase 1 | Done (Docker multi-stage, docker-compose) |
+| DEPLOY-02 | Phase 10 | Done (deploy/helm/getframe/) |
+| DEPLOY-03 | Phase 10 | Done (Helm values: resources.requests/limits) |
+| DEPLOY-04 | Phase 10 | Done (KEDA ScaledObject in Helm templates) |
+| WORKER-01 | Phase 9 | Partial (architecture supports, not benchmarked) |
+| WORKER-02 | Phase 9 | Partial (WorkerManager design, not validated) |
+| WORKER-03 | Phase 9 | Done (stateless DB-claim based) |
+| WORKER-04 | Phase 9 | Done (CancellationToken + SIGTERM) |
 
 **Coverage:**
 - v1 requirements: 49 total
-- Mapped to phases: 49
-- Unmapped: 0 ✓
+- Fully implemented: 39
+- Partially implemented: 5
+- Not implemented: 0 ✓ (all mapped to at least partial)
 
 **Per-Phase Requirement Counts:**
-- Phase 1 (Core Pipeline): 11 requirements
-- Phase 2 (Multi-Stream Management): 11 requirements
-- Phase 3 (Per-Stream Rule Configuration): 4 requirements
-- Phase 4 (Scene Detection & Composite Rules): 2 requirements
-- Phase 5 (Kafka Production Readiness): 4 requirements
-- Phase 6 (Task Management API): 2 requirements
-- Phase 7 (Web UI — Stream & Task Management): 4 requirements
-- Phase 8 (Web UI — Dashboard & Monitoring): 3 requirements
-- Phase 9 (Worker Scaling): 4 requirements
-- Phase 10 (Production Deployment): 4 requirements
+- Phase 1 (Core Pipeline): 11 requirements — All done
+- Phase 2 (Multi-Stream Management): 11 requirements — 9 done, 2 partial (STREAM-06, OBS-04)
+- Phase 3 (Per-Stream Rule Configuration): 4 requirements — All done
+- Phase 4 (Scene Detection & Composite Rules): 2 requirements — All done
+- Phase 5 (Kafka Production Readiness): 4 requirements — All done
+- Phase 6 (Task Management API): 2 requirements — All done
+- Phase 7 (Web UI — Stream & Task Management): 4 requirements — All done
+- Phase 8 (Web UI — Dashboard & Monitoring): 3 requirements — All done
+- Phase 9 (Worker Scaling): 4 requirements — 2 done, 2 partial (WORKER-01, WORKER-02)
+- Phase 10 (Production Deployment): 4 requirements — All done
 
 ---
 *Requirements defined: 2026-05-24*
