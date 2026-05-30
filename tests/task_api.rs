@@ -49,8 +49,8 @@ async fn create_test_stream(app: &axum::Router) -> String {
     let config = json!({
         "config": {
             "name": "test-stream",
-            "source_url": "rtsp://test:8554/test",
-            "source_type": "rtsp",
+            "source_url": "file:///tmp/test.h264",
+            "source_type": "file",
             "extract_interval_seconds": 5.0,
             "jpeg_quality": 85,
             "ffmpeg_threads": 1,
