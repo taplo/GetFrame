@@ -41,7 +41,6 @@ pub fn run_decode_pipeline(
     let mut reorder_depth: usize = 0;
     let mut first_keyframe_seen = false;
     let mut total_frames_decoded: u64 = 0;
-    let mut health_counter: u64 = 0;
 
     let mut rule_engine = {
         let rules = rules_shared.read().unwrap().clone();
@@ -170,10 +169,7 @@ pub fn run_decode_pipeline(
                                 }
                             }
 
-                            // Periodic health update (every 30 frames)
-                            health_counter += 1;
-                            #[allow(clippy::manual_is_multiple_of)]
-                            if health_counter % 30 == 0 {
+                            {
                                 let mut h = health_handle.lock().unwrap();
                                 h.frames_decoded = total_frames_decoded;
                                 h.frames_extracted = frame_number;

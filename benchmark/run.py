@@ -22,7 +22,7 @@ MEDIAMTX_HOST = "mediamtx"
 MEDIAMTX_PORT = "8554"
 
 STREAM_COUNTS = [1, 2, 4, 8, 12, 16, 24, 32]
-TARGET_FPS_VALUES = [5, 1]
+TARGET_FPS_VALUES = [1]
 STABILIZE_SEC = 30
 SAMPLE_COUNT = 6
 SAMPLE_INTERVAL = 5
@@ -45,7 +45,7 @@ def wait_for_worker(timeout: int = 60) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            resp = urllib.request.urlopen(f"{WORKER_API}/api/health", timeout=5)
+            resp = urllib.request.urlopen(f"{WORKER_API}/health", timeout=5)
             if resp.status == 200:
                 return True
         except (urllib.error.URLError, ConnectionError):
@@ -79,7 +79,15 @@ def get_docker_stats() -> dict:
     parts = out.split("\t")
     cpu_str = parts[1].replace("%", "") if len(parts) > 1 else "0"
     mem_str = parts[2].split("/")[0].strip() if len(parts) > 2 else "0M"
-    mem_val = float(mem_str.replace("MiB", "").replace("MB", "").strip())
+    mem_str = mem_str.strip()
+    if mem_str.endswith("GiB"):
+        mem_val = float(mem_str.replace("GiB", "")) * 1024
+    elif mem_str.endswith("MiB"):
+        mem_val = float(mem_str.replace("MiB", ""))
+    elif mem_str.endswith("MB"):
+        mem_val = float(mem_str.replace("MB", ""))
+    else:
+        mem_val = 0.0
     return {"cpu": float(cpu_str), "mem_mb": mem_val}
 
 
@@ -87,66 +95,89 @@ def start_ffmpeg(stream_id: int) -> None:
     """Start a single ffmpeg container pushing synthetic RTSP."""
     name = f"getframe-bench-ffmpeg-{stream_id}"
     stream_url = f"rtsp://{MEDIAMTX_HOST}:{MEDIAMTX_PORT}/stream-{stream_id}"
+    sh(f"docker rm -f {name} 2>/dev/null")  # remove any leftover
     sh(
-        f"docker run -d --name {name} --network getframe-bench_bench-net "
-        f"--restart no {FFMPEG_IMAGE} "
-        f"ffmpeg -re -f lavfi -i testsrc2=size=1920x1080:rate={TARGET_FPS} "
+        f"docker run -d --name {name} --network benchmark_bench-net "
+        f"--restart no --entrypoint ffmpeg {FFMPEG_IMAGE} "
+        f"-re -f lavfi -i testsrc2=size=1920x1080:rate={TARGET_FPS} "
         f"-c:v libx264 -preset ultrafast -tune zerolatency "
         f"-f rtsp {stream_url}"
     )
 
 
-def stop_ffmpeg(stream_id: int) -> None:
+def stop_ffmpeg(stream_num: int) -> None:
     """Stop and remove a single ffmpeg container."""
-    name = f"getframe-bench-ffmpeg-{stream_id}"
+    name = f"getframe-bench-ffmpeg-{stream_num}"
     sh(f"docker rm -f {name} 2>/dev/null")
 
 
-def register_stream(stream_id: int) -> bool:
-    """Register RTSP stream with worker via API."""
+def register_stream(stream_id: int) -> str | None:
+    """Register RTSP stream with worker via API. Returns stream ID on success."""
     url = f"{WORKER_API}/api/v1/streams"
-    body = json.dumps({
-        "source_url": f"rtsp://{MEDIAMTX_HOST}:{MEDIAMTX_PORT}/stream-{stream_id}",
-        "source_type": "rtsp",
-        "fps": TARGET_FPS,
-        "status": "active",
-    }).encode()
+    interval = 1.0 / TARGET_FPS
+    payload = {
+        "config": {
+            "source_url": f"rtsp://{MEDIAMTX_HOST}:{MEDIAMTX_PORT}/stream-{stream_id}",
+            "source_type": "rtsp",
+            "extract_interval_seconds": interval,
+            "rtsp_transport": "tcp",
+        }
+    }
     req = urllib.request.Request(
-        url, data=body,
+        url, data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"},
         method="POST"
     )
     try:
         resp = urllib.request.urlopen(req, timeout=10)
-        return resp.status in (200, 201)
-    except urllib.error.URLError:
-        return False
+        if resp.status in (200, 201):
+            body = json.loads(resp.read())
+            return body.get("id")
+        print(f"[{resp.status}]", end=" ", flush=True)
+        return None
+    except urllib.error.URLError as e:
+        print(f"[ERR]", end=" ", flush=True)
+        return None
 
 
-def unregister_stream(stream_id: int) -> None:
+def unregister_stream(stream_id: str) -> None:
     """Remove stream from worker via API."""
     try:
         req = urllib.request.Request(
             f"{WORKER_API}/api/v1/streams/{stream_id}",
             method="DELETE"
         )
-        urllib.request.urlopen(req, timeout=5)
-    except urllib.error.URLError:
+        urllib.request.urlopen(req, timeout=10)
+    except Exception:
         pass
 
+
+def get_total_frames() -> int:
+    """Get total frames_decoded from all streams via API."""
+    try:
+        data = json.loads(urllib.request.urlopen(
+            f"{WORKER_API}/api/v1/streams", timeout=5).read())
+        return sum(s.get("frames_decoded", 0) for s in data.get("streams", []))
+    except Exception:
+        return 0
+
+def get_total_errors() -> int:
+    """Get total error_count from all streams via API."""
+    try:
+        data = json.loads(urllib.request.urlopen(
+            f"{WORKER_API}/api/v1/streams", timeout=5).read())
+        return sum(s.get("error_count", 0) for s in data.get("streams", []))
+    except Exception:
+        return 0
 
 def collect_metrics(target_fps: int, num_streams: int) -> list:
     """Collect SAMPLE_COUNT samples of metrics."""
     samples = []
-    last_total = get_metric_value(
-        urllib.request.urlopen(WORKER_METRICS).read().decode(),
-        "getframe_frames_processed_total"
-    )
+    last_total = get_total_frames()
     for i in range(SAMPLE_COUNT):
         time.sleep(SAMPLE_INTERVAL)
-        text = urllib.request.urlopen(WORKER_METRICS).read().decode()
-        current_total = get_metric_value(text, "getframe_frames_processed_total")
-        errors = get_metric_value(text, "getframe_decode_errors_total")
+        current_total = get_total_frames()
+        errors = get_total_errors()
         actual_fps = (current_total - last_total) / SAMPLE_INTERVAL
         stats = get_docker_stats()
         samples.append({
@@ -165,93 +196,114 @@ def collect_metrics(target_fps: int, num_streams: int) -> list:
     return samples
 
 
+CSV_FIELDS = [
+    "streams", "target_fps", "actual_fps", "cpu_percent",
+    "mem_mb", "errors", "cpu_per_stream"
+]
+
+
+def log(msg: str, end="\n"):
+    ts = time.strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}", end=end, flush=True)
+
+
+def write_csv(csv_path: str, samples: list, append: bool = False):
+    mode = "a" if append else "w"
+    with open(csv_path, mode, newline="") as f:
+        w = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        if not append:
+            w.writeheader()
+        w.writerows(samples)
+
+
 def run_benchmark():
     """Main benchmark orchestrator."""
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    # Pull images
-    print("Pulling Docker images...")
-    sh(f"docker pull {FFMPEG_IMAGE}")
-    sh("docker pull bluenviron/mediamtx:latest")
+    log("Cleaning up previous benchmark containers...")
+    sh("docker rm -f $(docker ps -aq --filter name=getframe-bench- 2>/dev/null) 2>/dev/null; true")
+
+    #log("Pulling Docker images...")
+    #sh(f"docker pull {FFMPEG_IMAGE}")
+    #sh("docker pull bluenviron/mediamtx:latest")
 
     for target_fps in TARGET_FPS_VALUES:
         global TARGET_FPS
         TARGET_FPS = target_fps
 
         csv_path = RESULTS_DIR / f"benchmark-{target_fps}fps.csv"
-        all_samples = []
 
-        print(f"\n{'='*60}")
-        print(f"Benchmark: target {target_fps}fps")
-        print(f"{'='*60}")
+        log(f"\n{'='*60}")
+        log(f"Benchmark: target {target_fps}fps")
+        log(f"{'='*60}")
+
+        log("Starting mediamtx, minio, and worker...")
+        sh(f"docker compose -f {COMPOSE_FILE} up -d")
+        if not wait_for_worker():
+            log("ERROR: worker did not become ready")
+            sys.exit(1)
+        log("ready")
 
         for num_streams in STREAM_COUNTS:
-            print(f"\n\u2192 {num_streams} streams...", end=" ", flush=True)
+            log(f"\u2192 {num_streams} streams...", end=" ")
 
             # Start ffmpeg containers
             for sid in range(1, num_streams + 1):
                 start_ffmpeg(sid)
 
-            # Wait for ffmpeg to connect
+            log("waiting 5s for ffmpeg...", end=" ")
             time.sleep(5)
 
             # Register streams with worker
+            registered_ids = []
             for sid in range(1, num_streams + 1):
-                register_stream(sid)
+                wid = register_stream(sid)
+                if wid:
+                    registered_ids.append(wid)
+            log(f"registered {len(registered_ids)}")
 
-            # Wait for stabilization
-            print(f"stabilizing {STABILIZE_SEC}s...", end=" ", flush=True)
+            # Wait for first frame to arrive, or timeout
+            waited = 0
+            max_wait = 300 if target_fps <= 1 else STABILIZE_SEC
+            log(f"waiting for frames (up to {max_wait}s)...", end=" ")
+            while waited < max_wait:
+                frames = get_total_frames()
+                if frames > 0:
+                    log(f"first frame at {waited}s", end=" ")
+                    break
+                time.sleep(5)
+                waited += 5
+            else:
+                log(f"no frames after {max_wait}s", end=" ")
+            # Extra stabilization after first frame
             time.sleep(STABILIZE_SEC)
 
             # Collect metrics
-            print("sampling", end=" ", flush=True)
+            log("sampling", end=" ")
             samples = collect_metrics(target_fps, num_streams)
 
-            # Clean up
-            for sid in range(1, num_streams + 1):
-                unregister_stream(sid)
+            # Write incremental results so partial data survives
+            write_csv(csv_path, samples, append=os.path.exists(csv_path))
+            log(f" wrote {len(samples)} samples to {csv_path}")
+
+            # Stop ffmpeg, restart compose for a clean worker next round
             for sid in range(1, num_streams + 1):
                 stop_ffmpeg(sid)
+            sh(f"docker compose -f {COMPOSE_FILE} down")
 
-            all_samples.extend(samples)
+            # Restart compose for next iteration
+            if num_streams != STREAM_COUNTS[-1]:
+                sh(f"docker compose -f {COMPOSE_FILE} up -d")
+                if not wait_for_worker():
+                    log("ERROR: worker failed to restart")
+                    sys.exit(1)
+                log("[clean]", end=" ")
 
-        # Write CSV
-        with open(csv_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=[
-                "streams", "target_fps", "actual_fps", "cpu_percent",
-                "mem_mb", "errors", "cpu_per_stream"
-            ])
-            writer.writeheader()
-            writer.writerows(all_samples)
+        log(f"Results saved to {csv_path}")
 
-        print(f"\nResults saved to {csv_path}")
-
-    # Summary
-    print_summary()
-
-
-def print_summary():
-    """Print summary table from all CSV files."""
-    print(f"\n{'='*60}")
-    print("SUMMARY")
-    print(f"{'='*60}")
-    for target_fps in TARGET_FPS_VALUES:
-        csv_path = RESULTS_DIR / f"benchmark-{target_fps}fps.csv"
-        if not csv_path.exists():
-            continue
-        with open(csv_path) as f:
-            reader = list(csv.DictReader(f))
-        if not reader:
-            continue
-        max_row = max(reader, key=lambda r: int(r["streams"]) if float(r["actual_fps"]) / float(r["target_fps"]) >= 0.9 else 0)
-        max_streams = int(max_row["streams"])
-        num_positive = len([r for r in reader if int(r["streams"]) > 0])
-        total_cpu_per_stream = sum(float(r["cpu_per_stream"]) for r in reader if int(r["streams"]) > 0)
-        avg_cpu_per_stream = total_cpu_per_stream / max(1, num_positive)
-        print(f"\n  Target {target_fps}fps:")
-        print(f"    Max streams before saturation: {max_streams}")
-        print(f"    Avg CPU per stream: {avg_cpu_per_stream:.1f}%")
-        print(f"    Streams per core (est): {max_streams / 16:.1f}")
+    log("Cleaning up...")
+    sh(f"docker compose -f {COMPOSE_FILE} down")
+    log(f"Done. Results in {RESULTS_DIR}/")
 
 
 if __name__ == "__main__":

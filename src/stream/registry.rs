@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use crate::config::StreamConfig;
 use crate::pipeline::rule::RuleConfig;
 use crate::stream::health::StreamHealth;
@@ -9,7 +9,7 @@ use crate::types::StreamId;
 pub struct StreamInfo {
     pub id: StreamId,
     pub config: StreamConfig,
-    pub health: StreamHealth,
+    pub health: Arc<Mutex<StreamHealth>>,
     pub rules: Arc<RwLock<Vec<RuleConfig>>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -46,7 +46,7 @@ impl StreamRegistry {
         let info = StreamInfo {
             id,
             config,
-            health: StreamHealth::new(),
+            health: Arc::new(Mutex::new(StreamHealth::new())),
             rules: Arc::new(RwLock::new(vec![default_rule])),
             created_at: chrono::Utc::now(),
         };
@@ -66,14 +66,6 @@ impl StreamRegistry {
     pub fn list(&self) -> Vec<StreamInfo> {
         let inner = self.inner.read().unwrap();
         inner.streams.values().cloned().collect()
-    }
-
-    #[allow(dead_code)]
-    pub fn update_health(&self, id: &StreamId, health: StreamHealth) {
-        let mut inner = self.inner.write().unwrap();
-        if let Some(info) = inner.streams.get_mut(id) {
-            info.health = health;
-        }
     }
 
     pub fn update_config(&self, id: &StreamId, config: StreamConfig) -> bool {

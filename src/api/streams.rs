@@ -139,6 +139,10 @@ pub async fn create_stream(
         config.source_type = detect_source_type(&config.source_url).to_string();
     }
 
+    if config.rtsp_transport.is_empty() && config.source_type == "rtsp" {
+        config.rtsp_transport = "tcp".to_string();
+    }
+
     if config.source_type != "file" {
         match probe_url(&config.source_url, &config.source_type, &config.rtsp_transport).await {
             Ok(latency_ms) => {
@@ -345,7 +349,7 @@ pub async fn get_latest_frame(
     Path(id): Path<StreamId>,
 ) -> Result<(StatusCode, [(&'static str, &'static str); 1], Vec<u8>), (StatusCode, Json<serde_json::Value>)> {
     let info = manager.registry().get(&id).ok_or_else(|| not_found(id))?;
-    let key = info.health.latest_frame_key.clone()
+    let key = info.health.lock().unwrap().latest_frame_key.clone()
         .ok_or_else(|| (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "No frames available yet"})),
@@ -450,8 +454,9 @@ fn not_found(id: StreamId) -> (StatusCode, Json<serde_json::Value>) {
 }
 
 fn to_response(info: crate::stream::registry::StreamInfo) -> StreamResponse {
-    let fph = if info.health.uptime_seconds > 0 {
-        info.health.frames_extracted as f64 / (info.health.uptime_seconds as f64 / 3600.0)
+    let health = info.health.lock().unwrap().clone();
+    let fph = if health.uptime_seconds > 0 {
+        health.frames_extracted as f64 / (health.uptime_seconds as f64 / 3600.0)
     } else {
         0.0
     };
@@ -462,21 +467,21 @@ fn to_response(info: crate::stream::registry::StreamInfo) -> StreamResponse {
         source_type: info.config.source_type,
         tags: info.config.tags,
         description: info.config.description,
-        status: match &info.health.status {
+        status: match &health.status {
             StreamStatus::Online => "online".to_string(),
             StreamStatus::Offline => "offline".to_string(),
             StreamStatus::Error(e) => format!("error: {}", e),
             StreamStatus::Connecting => "connecting".to_string(),
         },
-        last_online: info.health.last_online.map(|t| t.to_rfc3339()),
-        last_error: info.health.last_error.map(|t| t.to_rfc3339()),
-        error_count: info.health.error_count,
-        uptime_seconds: info.health.uptime_seconds,
-        frames_decoded: info.health.frames_decoded,
-        frames_extracted: info.health.frames_extracted,
+        last_online: health.last_online.map(|t| t.to_rfc3339()),
+        last_error: health.last_error.map(|t| t.to_rfc3339()),
+        error_count: health.error_count,
+        uptime_seconds: health.uptime_seconds,
+        frames_decoded: health.frames_decoded,
+        frames_extracted: health.frames_extracted,
         frames_per_hour: (fph * 10.0).round() / 10.0,
-        reconnect_count: info.health.reconnect_count,
-        latest_frame_key: info.health.latest_frame_key.clone(),
+        reconnect_count: health.reconnect_count,
+        latest_frame_key: health.latest_frame_key.clone(),
         created_at: info.created_at.to_rfc3339(),
     }
 }

@@ -1,24 +1,112 @@
-# benchmark/compose.yaml
 services:
   mediamtx:
     image: bluenviron/mediamtx:latest
-    container_name: getframe-bench-mediamtx
-    restart: unless-stopped
     ports:
       - "8554:8554"
+    restart: unless-stopped
+    networks:
+      - bench-net
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: getframe
+      MYSQL_USER: getframe
+      MYSQL_PASSWORD: getframe
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks:
+      - bench-net
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    ports:
+      - "9093:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - bench-net
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: getframe
+      MINIO_ROOT_PASSWORD: getframe123
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - bench-net
+
+  init-bucket:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set local http://minio:9000 getframe getframe123 &&
+      /usr/bin/mc mb local/getframe-frames --ignore-existing &&
+      echo 'Bucket ready: getframe-frames'
+      "
+    networks:
+      - bench-net
+
+  init-kafka-topics:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      kafka-topics --bootstrap-server kafka:9092 --topic getframe-frames --create --if-not-exists &&
+      echo 'Topic ready: getframe-frames'
+      "
     networks:
       - bench-net
 
   worker:
-    image: getframe-worker:latest
     container_name: getframe-bench-worker
-    restart: unless-stopped
+    image: getframe-worker:latest
+    entrypoint: ["/getframe-worker", "--config", "/etc/getframe/config.yaml"]
+    depends_on:
+      init-bucket:
+        condition: service_completed_successfully
+      init-kafka-topics:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
     volumes:
-      - ./config/worker.yaml:/etc/getframe/config.yaml:ro
-    depends_on:
-      - mediamtx
+      - ./config:/etc/getframe
+    restart: unless-stopped
     networks:
       - bench-net
 

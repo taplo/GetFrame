@@ -1,8 +1,7 @@
 use crate::types::DecodedFrame;
 use anyhow::Result;
 use bytes::Bytes;
-use image::codecs::jpeg::JpegEncoder;
-use image::ExtendedColorType;
+use turbojpeg::{Compressor, Image, PixelFormat};
 use std::time::Instant;
 
 pub fn encode_jpeg(
@@ -27,9 +26,16 @@ pub fn encode_jpeg(
     let yuv_to_rgb_us = timer.elapsed().as_micros();
 
     let encode_timer = Instant::now();
-    let mut jpeg_bytes = Vec::new();
-    let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_bytes, quality);
-    encoder.encode(&rgb, width as u32, height as u32, ExtendedColorType::Rgb8)?;
+    let mut compressor = Compressor::new()?;
+    compressor.set_quality(quality as i32)?;
+    let image = Image {
+        pixels: rgb.as_slice(),
+        width,
+        pitch: width * 3,
+        height,
+        format: PixelFormat::RGB,
+    };
+    let jpeg = compressor.compress_to_vec(image)?;
 
     let encode_us = encode_timer.elapsed().as_micros();
 
@@ -38,11 +44,11 @@ pub fn encode_jpeg(
         frame_number = frame.frame_number,
         yuv_to_rgb_us = yuv_to_rgb_us,
         jpeg_encode_us = encode_us,
-        jpeg_size_bytes = jpeg_bytes.len(),
+        jpeg_size_bytes = jpeg.len(),
         "Frame encoded"
     );
 
-    Ok(Bytes::from(jpeg_bytes))
+    Ok(Bytes::from(jpeg))
 }
 
 #[allow(clippy::too_many_arguments)]

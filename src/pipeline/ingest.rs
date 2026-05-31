@@ -19,8 +19,9 @@ pub fn open_video_source(
     if source_type == "rtsp" {
         opts.set("rtsp_transport", rtsp_transport);
     }
-    opts.set("analyzeduration", "5000000");
+    opts.set("analyzeduration", "3000000");
     opts.set("probesize", "5000000");
+    opts.set("stimeout", "5000000");
 
     let ictx = format::input_with_dictionary(url, opts)?;
 

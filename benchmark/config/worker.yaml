@@ -1,24 +1,25 @@
-server:
-  host: "0.0.0.0"
-  port: 8080
+http:
+  bind_address: "0.0.0.0"
+  bind_port: 8080
 
 kafka:
-  brokers: ""
+  brokers: "127.0.0.1:9092"
   topic: "benchmark"
-  acks: "none"
+  acks: "all"
   compression: "none"
   consumer_group: "bench-group"
   schema_registry_url: ~
   partition_key_field: ~
 
 storage:
-  endpoint: ""
+  endpoint_url: "http://minio:9000"
   region: "us-east-1"
   bucket: "benchmark"
-  access_key: "benchmark"
-  secret_key: "benchmark-key"
-  path_style: true
+  access_key_id: "minioadmin"
+  secret_access_key: "minioadmin"
 
 preload_streams: []
 
-logging: "info"
+logging:
+  level: "info"
+  json: false

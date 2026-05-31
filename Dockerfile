@@ -10,9 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
     libavdevice-dev libavfilter-dev libswresample-dev libpostproc-dev \
     cmake make g++ libssl-dev libcurl4-openssl-dev clang libclang-dev curl libzstd-dev \
+    nasm \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml ./
 COPY .cargo/ .cargo/
 COPY src/ src/
 COPY migrations/ migrations/

@@ -30,7 +30,7 @@ utoipa-swagger-ui = { version = "9", features = ["axum"], default-features = fal
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 crossbeam = "0.8"
-image = { version = "0.25", default-features = false, features = ["jpeg"] }
+turbojpeg = "=1.3.3"
 aws-sdk-s3 = { version = "1", features = ["behavior-version-latest"] }
 aws-config = "1"
 aws-credential-types = "1"

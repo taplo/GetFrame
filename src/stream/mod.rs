@@ -74,7 +74,8 @@ impl StreamManager {
         self.registry.add(id, config.clone());
 
         let shutdown_token = CancellationToken::new();
-        let health_handle = Arc::new(Mutex::new(StreamHealth::new()));
+        let info = self.registry.get(&id).expect("Stream must exist after add");
+        let health_handle = info.health.clone();
         let rules_shared = self.registry.get_rules_shared(&id)
             .expect("Stream must exist after add");
 
@@ -167,15 +168,12 @@ impl StreamManager {
                                         ).await {
                                             tracing::error!(error = %e, stream_id = %sid, "Metadata publish failed");
                                             crate::metrics::KAFKA_ERRORS.increment(1);
-                                            crate::metrics::kafka_errors(&sid.to_string());
                                         }
                                         crate::metrics::FRAMES_PROCESSED.increment(1);
-                                        crate::metrics::frames_processed(&sid.to_string());
                                     }
                                     Err(e) => {
                                         tracing::error!(error = %e, stream_id = %sid, "Upload failed");
                                         crate::metrics::STORAGE_ERRORS.increment(1);
-                                        crate::metrics::storage_errors(&sid.to_string());
                                     }
                                 }
                             }
@@ -306,15 +304,12 @@ impl StreamManager {
                                                 ).await {
                                                     tracing::error!(error = %e, stream_id = %sid, "Kafka failed");
                                                     crate::metrics::KAFKA_ERRORS.increment(1);
-                                                    crate::metrics::kafka_errors(&sid.to_string());
                                                 }
                                                 crate::metrics::FRAMES_PROCESSED.increment(1);
-                                                crate::metrics::frames_processed(&sid.to_string());
                                             }
                                             Err(e) => {
                                                 tracing::error!(error = %e, stream_id = %sid, "Upload failed");
                                                 crate::metrics::STORAGE_ERRORS.increment(1);
-                                                crate::metrics::storage_errors(&sid.to_string());
                                             }
                                         }
                                     }
@@ -355,7 +350,9 @@ impl StreamManager {
             h.exit_tx.send(Some(PipelineExitReason::UserInitiated)).ok();
             h.shutdown_token.cancel();
             if let Some(jh) = h.join_handle.take() {
-                let _ = jh.join();
+                tokio::task::spawn_blocking(move || {
+                    let _ = jh.join();
+                });
             }
             self.registry.remove(id);
 
@@ -381,7 +378,9 @@ impl StreamManager {
             h.exit_tx.send(Some(PipelineExitReason::UserInitiated)).ok();
             h.shutdown_token.cancel();
             if let Some(jh) = h.join_handle.take() {
-                let _ = jh.join();
+                tokio::task::spawn_blocking(move || {
+                    let _ = jh.join();
+                });
             }
             crate::metrics::STREAMS_ACTIVE.decrement(1.0);
             tracing::info!(stream_id = %id, "Pipeline stopped");
@@ -405,7 +404,7 @@ impl StreamManager {
         };
 
         let shutdown_token = CancellationToken::new();
-        let health_handle = Arc::new(Mutex::new(StreamHealth::new()));
+        let health_handle = info.health.clone();
         let rules_shared = match self.registry.get_rules_shared(id) {
             Some(rules) => rules,
             None => return false,

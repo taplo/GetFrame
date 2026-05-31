@@ -38,25 +38,16 @@ static PROMETHEUS_HANDLE: LazyLock<PrometheusHandle> = LazyLock::new(|| {
         .expect("Failed to install Prometheus recorder")
 });
 
-pub fn frames_processed(stream_id: &str) {
-    counter!("getframe_frames_processed_total", "stream_id" => stream_id.to_string()).increment(1);
-}
-
-#[allow(dead_code)]
-pub fn decode_errors(stream_id: &str) {
-    counter!("getframe_decode_errors_total", "stream_id" => stream_id.to_string()).increment(1);
-}
-
-pub fn storage_errors(stream_id: &str) {
-    counter!("getframe_storage_errors_total", "stream_id" => stream_id.to_string()).increment(1);
-}
-
-pub fn kafka_errors(stream_id: &str) {
-    counter!("getframe_kafka_errors_total", "stream_id" => stream_id.to_string()).increment(1);
-}
-
-pub async fn metrics_handler() -> String {
-    PROMETHEUS_HANDLE.render()
+pub async fn metrics_handler() -> Result<String, (axum::http::StatusCode, &'static str)> {
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        tokio::task::spawn_blocking(move || PROMETHEUS_HANDLE.render()),
+    )
+    .await
+    {
+        Ok(Ok(text)) => Ok(text),
+        _ => Err((axum::http::StatusCode::SERVICE_UNAVAILABLE, "metrics timeout")),
+    }
 }
 
 use chrono::Utc;
