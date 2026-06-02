@@ -147,3 +147,86 @@ async fn test_decode_pipeline_early_cancel() {
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     assert_eq!(count, 2, "Should have received exactly 2 frames before cancel");
 }
+
+#[test]
+fn test_scene_detection_filter_detects_cut() {
+    ffmpeg_next::init().unwrap();
+
+    let path = "tests/fixtures/scene_change.mp4";
+    let mut demuxed = getframe_worker::pipeline::ingest::open_video_source(path, "file", "tcp", 1)
+        .expect("Failed to open scene_change.mp4");
+
+    let mut filter = getframe_worker::pipeline::filter::SceneDetectFilter::new(
+        demuxed.width,
+        demuxed.height,
+        demuxed.decoder.format(),
+        demuxed.time_base,
+        0.3,
+    )
+    .expect("Failed to create SceneDetectFilter");
+
+    let mut scores = Vec::new();
+    let mut frame = ffmpeg_next::util::frame::Video::empty();
+
+    'outer: for (stream_idx, recv_packet) in demuxed.ictx.packets() {
+        if stream_idx.index() != demuxed.video_stream_index {
+            continue;
+        }
+        let _ = demuxed.decoder.send_packet(&recv_packet);
+        loop {
+            match demuxed.decoder.receive_frame(&mut frame) {
+                Ok(()) => {
+                    let score = filter.filter(&frame).unwrap_or(0.0);
+                    assert!(score >= 0.0, "Score {} should be non-negative", score);
+                    scores.push(score);
+                    if scores.len() >= 60 {
+                        break 'outer;
+                    }
+                }
+                Err(ffmpeg_next::Error::Eof) => break,
+                Err(_) => break,
+            }
+        }
+    }
+
+    assert!(scores.len() >= 30, "Expected >=30 frames, got {}", scores.len());
+
+    // Early frames (all red) should have low scores (same scene, no change)
+    let early_avg: f64 = scores.iter().take(10).sum::<f64>() / 10.0;
+    assert!(
+        early_avg < 1.0,
+        "Early frames (constant color) should avg <1.0, got {}",
+        early_avg
+    );
+
+    // At least one frame should spike significantly (red→blue transition)
+    let max_score = scores.iter().cloned().fold(0.0f64, f64::max);
+    assert!(
+        max_score > 5.0,
+        "Scene cut should produce score >5.0, got max {} (scores: {:?})",
+        max_score,
+        scores
+    );
+
+    // The spike should be 10x+ the early average
+    assert!(
+        max_score > early_avg * 10.0,
+        "Scene cut score {} should be 10x early avg {}",
+        max_score,
+        early_avg
+    );
+
+    // Late frames (all blue) should return to low scores
+    if scores.len() > 50 {
+        let late_avg: f64 = scores
+            .iter()
+            .skip(scores.len().saturating_sub(10))
+            .sum::<f64>()
+            / 10.0;
+        assert!(
+            late_avg < 1.0,
+            "Late frames (constant color) should avg <1.0, got {}",
+            late_avg
+        );
+    }
+}

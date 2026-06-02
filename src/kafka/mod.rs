@@ -31,9 +31,9 @@ impl KafkaProducer {
             .set("enable.idempotence", "true")
             .set("compression.type", &config.compression)
             .set("message.timeout.ms", "30000")
-            .set("queue.buffering.max.ms", "20")
-            .set("batch.size", "131072")
-            .set("linger.ms", "20");
+            .set("queue.buffering.max.ms", "50")
+            .set("batch.size", "262144")
+            .set("linger.ms", "50");
 
         if config.acks != "all" {
             client_config.set("acks", &config.acks);
@@ -243,5 +243,72 @@ impl KafkaProducer {
             schema_registry_client: None,
             schema_id: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::FrameMetadata;
+
+    #[test]
+    fn test_noop_constructor() {
+        let producer = KafkaProducer::noop();
+        assert_eq!(producer.brokers, "127.0.0.1:1");
+        assert_eq!(producer.topic, "test");
+        assert!(producer.schema_id.is_none());
+        assert!(producer.schema_registry_client.is_none());
+    }
+
+    #[test]
+    fn test_serialize_avro_wire_format() {
+        let producer = KafkaProducer::noop();
+        let meta = FrameMetadata {
+            stream_id: "test-stream".into(),
+            source_type: "stream".into(),
+            timestamp: "2026-01-01T00:00:00Z".into(),
+            frame_number: 7,
+            rule_trigger: "interval".into(),
+            pts: 210,
+            storage_url: "http://localhost/bucket/test.jpg".into(),
+            storage_bucket: "bucket".into(),
+            storage_key: "test.jpg".into(),
+            jpeg_size_bytes: 100,
+            jpeg_width: 640,
+            jpeg_height: 480,
+        };
+
+        let bytes = producer.serialize_avro(&meta, 42).unwrap();
+        assert_eq!(bytes[0], 0x00);
+        assert_eq!(&bytes[1..5], &[0, 0, 0, 42]);
+        let avro_payload = &bytes[5..];
+        let reader = apache_avro::Reader::new(std::io::Cursor::new(avro_payload)).unwrap();
+        assert_eq!(reader.count(), 1);
+    }
+
+    #[test]
+    fn test_serialize_avro_with_different_schema_id() {
+        let producer = KafkaProducer::noop();
+        let meta = FrameMetadata {
+            stream_id: "s".into(),
+            source_type: "t".into(),
+            timestamp: "2026-01-01T00:00:00Z".into(),
+            frame_number: 1,
+            rule_trigger: "r".into(),
+            pts: 30,
+            storage_url: "u".into(),
+            storage_bucket: "b".into(),
+            storage_key: "k".into(),
+            jpeg_size_bytes: 1,
+            jpeg_width: 1,
+            jpeg_height: 1,
+        };
+
+        let bytes = producer.serialize_avro(&meta, 65535).unwrap();
+        assert_eq!(bytes[0], 0x00);
+        assert_eq!(&bytes[1..5], &[0, 0, 255, 255]);
+        let avro_payload = &bytes[5..];
+        let reader = apache_avro::Reader::new(std::io::Cursor::new(avro_payload)).unwrap();
+        assert_eq!(reader.count(), 1);
     }
 }

@@ -183,3 +183,72 @@ impl StorageClient {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::ExtractedFrame;
+    use bytes::Bytes;
+    use uuid::Uuid;
+
+    fn make_frame(stream_id: StreamId, frame_number: u64) -> ExtractedFrame {
+        ExtractedFrame {
+            stream_id,
+            frame_number,
+            pts: frame_number as i64 * 30,
+            timestamp_seconds: frame_number as f64,
+            jpeg_bytes: Bytes::from(vec![0xFF, 0xD8, 0xFF]),
+            rule_trigger: "test".into(),
+            jpeg_quality: 85,
+            width: 1920,
+            height: 1080,
+        }
+    }
+
+    #[test]
+    fn test_generate_key_format() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let frame = make_frame(id, 42);
+        let key = StorageClient::generate_key(&id, &frame);
+
+        assert!(key.starts_with("550e8400-e29b-41d4-a716-446655440000/"));
+        assert!(key.ends_with("_42.jpg"));
+
+        let parts: Vec<&str> = key.split('/').collect();
+        assert_eq!(parts.len(), 3);
+        assert_eq!(parts[0], "550e8400-e29b-41d4-a716-446655440000");
+        assert_eq!(parts[1].len(), 10);
+        assert!(parts[2].ends_with("_42.jpg"));
+    }
+
+    #[test]
+    fn test_generate_key_different_streams() {
+        let id1 = StreamId::new_v4();
+        let id2 = StreamId::new_v4();
+        let frame = make_frame(id1, 1);
+        let key1 = StorageClient::generate_key(&id1, &frame);
+        let key2 = StorageClient::generate_key(&id2, &frame);
+        assert_ne!(key1, key2);
+        assert!(key1.starts_with(&id1.to_string()));
+        assert!(key2.starts_with(&id2.to_string()));
+    }
+
+    #[test]
+    fn test_generate_key_different_frames() {
+        let id = StreamId::new_v4();
+        let frame1 = make_frame(id, 1);
+        let frame2 = make_frame(id, 100);
+        let key1 = StorageClient::generate_key(&id, &frame1);
+        let key2 = StorageClient::generate_key(&id, &frame2);
+        assert_ne!(key1, key2);
+        assert!(key1.ends_with("_1.jpg"));
+        assert!(key2.ends_with("_100.jpg"));
+    }
+
+    #[test]
+    fn test_noop_client() {
+        let client = StorageClient::noop();
+        assert_eq!(client.bucket(), "test-bucket");
+        assert!(client.endpoint_url.is_none());
+    }
+}

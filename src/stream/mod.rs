@@ -4,21 +4,114 @@ pub mod registry;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
+use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use crate::config::StreamConfig;
 use crate::pipeline;
 use crate::pipeline::rule::RuleConfig;
 use crate::stream::health::StreamHealth;
 use crate::stream::registry::StreamRegistry;
-use crate::types::StreamId;
+use crate::types::{ExtractedFrame, PipelineExitReason, StreamId};
 
-#[derive(Debug, Clone)]
-pub enum PipelineExitReason {
-    UserInitiated,
-    #[allow(dead_code)]
-    Error(String),
-    #[allow(dead_code)]
-    Eof,
+struct UploadResult {
+    frame: ExtractedFrame,
+    url: String,
+    key: String,
+    bucket: String,
+    partition_key: String,
+}
+
+fn spawn_consumer_tasks(
+    stream_id: StreamId,
+    extracted_rx: crossbeam::channel::Receiver<ExtractedFrame>,
+    shutdown_token: CancellationToken,
+    health_handle: Arc<Mutex<StreamHealth>>,
+    storage_client: Arc<crate::storage::StorageClient>,
+    kafka_producer: Arc<crate::kafka::KafkaProducer>,
+    kafka_topic_override: Option<String>,
+    partition_key_field: String,
+) {
+    let (upload_tx, mut publish_rx) = tokio::sync::mpsc::channel::<UploadResult>(32);
+    let upload_semaphore = Arc::new(Semaphore::new(4));
+
+    // Upload task: receive frames from decoder → upload to S3 → forward to channel
+    {
+        let upload_sid = stream_id;
+        let upload_st = storage_client;
+        let upload_shutdown = shutdown_token.clone();
+        let upload_health = health_handle.clone();
+        let upload_pk = partition_key_field.clone();
+        let upload_tx = upload_tx;
+        let sem = upload_semaphore;
+
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = upload_shutdown.cancelled() => {
+                        tracing::info!(stream_id = %upload_sid, "Upload task shut down");
+                        break;
+                    }
+                    result = tokio::task::spawn_blocking({
+                        let rx = extracted_rx.clone();
+                        move || rx.recv()
+                    }) => {
+                        match result {
+                            Ok(Ok(frame)) => {
+                                let _permit = sem.acquire().await.unwrap();
+                                match upload_st.upload_frame(&frame).await {
+                                    Ok((url, key)) => {
+                                        {
+                                            let mut h = upload_health.lock().unwrap();
+                                            h.record_frame_stored(key.clone());
+                                        }
+                                        let bucket = upload_st.bucket().to_string();
+                                        let partition_key = match upload_pk.as_str() {
+                                            "stream_id" => upload_sid.to_string(),
+                                            "timestamp" => format!("{}", frame.timestamp_seconds),
+                                            _ => format!("{}", frame.frame_number),
+                                        };
+                                        if upload_tx.send(UploadResult {
+                                            frame, url, key, bucket, partition_key,
+                                        }).await.is_err() {
+                                            tracing::info!(stream_id = %upload_sid, "Publish channel closed");
+                                            break;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(error = %e, stream_id = %upload_sid, "Upload failed");
+                                        crate::metrics::STORAGE_ERRORS.increment(1);
+                                    }
+                                }
+                            }
+                            _ => {
+                                tracing::info!(stream_id = %upload_sid, "Frame channel closed");
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Publish task: receive upload results → publish to Kafka
+    tokio::spawn(async move {
+        while let Some(result) = publish_rx.recv().await {
+            if let Err(e) = kafka_producer.publish_metadata(
+                &result.frame,
+                &result.url,
+                &result.bucket,
+                &result.key,
+                kafka_topic_override.as_deref(),
+                &result.partition_key,
+            ).await {
+                tracing::error!(error = %e, stream_id = %stream_id, "Metadata publish failed");
+                crate::metrics::KAFKA_ERRORS.increment(1);
+            }
+            crate::metrics::FRAMES_PROCESSED.increment(1);
+        }
+        tracing::info!(stream_id = %stream_id, "Publish task shut down");
+    });
 }
 
 #[allow(dead_code)]
@@ -84,6 +177,7 @@ impl StreamManager {
         let mut pipeline = pipeline::Pipeline::start(
             &config, id, shutdown_token.clone(),
             health_handle.clone(), rules_shared.clone(), None,
+            exit_tx.clone(),
         );
 
         self.spawn_frame_consumer(id, &config, pipeline.extracted_rx.clone(),
@@ -125,67 +219,21 @@ impl StreamManager {
         shutdown_token: CancellationToken,
         health_handle: Arc<Mutex<StreamHealth>>,
     ) {
-        let st = self.storage_client.clone();
-        let kp = self.kafka_producer.clone();
-        let sid = stream_id;
-
         let kafka_topic_override: Option<String> = config.kafka.as_ref().map(|k| k.topic.clone());
         let partition_key_field: String = config.kafka.as_ref()
             .and_then(|k| k.partition_key_field.clone())
             .unwrap_or_else(|| "frame_number".into());
 
-        tokio::spawn(async move {
-            let kafka_topic_override_clone = kafka_topic_override.clone();
-            let pk_field = partition_key_field.clone();
-            loop {
-                tokio::select! {
-                    _ = shutdown_token.cancelled() => {
-                        tracing::info!(stream_id = %sid, "Frame consumer shut down");
-                        break;
-                    }
-                    result = tokio::task::spawn_blocking({
-                        let rx = extracted_rx.clone();
-                        move || rx.recv()
-                    }) => {
-                        match result {
-                            Ok(Ok(frame)) => {
-                                match st.upload_frame(&frame).await {
-                                    Ok((url, key)) => {
-                                        {
-                                            let mut h = health_handle.lock().unwrap();
-                                            h.record_frame_stored(key.clone());
-                                        }
-                                        let bucket = st.bucket().to_string();
-                                        let partition_key = match pk_field.as_str() {
-                                            "stream_id" => sid.to_string(),
-                                            "timestamp" => format!("{}", frame.timestamp_seconds),
-                                            _ => format!("{}", frame.frame_number),
-                                        };
-                                        if let Err(e) = kp.publish_metadata(
-                                            &frame, &url, &bucket, &key,
-                                            kafka_topic_override_clone.as_deref(),
-                                            &partition_key,
-                                        ).await {
-                                            tracing::error!(error = %e, stream_id = %sid, "Metadata publish failed");
-                                            crate::metrics::KAFKA_ERRORS.increment(1);
-                                        }
-                                        crate::metrics::FRAMES_PROCESSED.increment(1);
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(error = %e, stream_id = %sid, "Upload failed");
-                                        crate::metrics::STORAGE_ERRORS.increment(1);
-                                    }
-                                }
-                            }
-                            _ => {
-                                tracing::info!(stream_id = %sid, "Frame channel closed");
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        });
+        spawn_consumer_tasks(
+            stream_id,
+            extracted_rx,
+            shutdown_token,
+            health_handle,
+            self.storage_client.clone(),
+            self.kafka_producer.clone(),
+            kafka_topic_override,
+            partition_key_field,
+        );
     }
 
     fn spawn_reconnection_task(
@@ -265,60 +313,21 @@ impl StreamManager {
                 let mut pipeline = pipeline::Pipeline::start(
                     &cfg, stream_id, new_shutdown.clone(),
                     health_handle.clone(), rules_shared.clone(), None,
+                    new_exit_tx.clone(),
                 );
 
-                let st = storage_client.clone();
-                let kp = kafka_producer.clone();
-                let sid = stream_id;
-                let sh = new_shutdown.clone();
-                let hh = health_handle.clone();
-                let kafka_topic_override_re: Option<String> = cfg.kafka.as_ref().map(|k| k.topic.clone());
-                let pk_field_re: String = cfg.kafka.as_ref()
-                    .and_then(|k| k.partition_key_field.clone())
-                    .unwrap_or_else(|| "frame_number".into());
-                tokio::spawn(async move {
-                    loop {
-                        tokio::select! {
-                            _ = sh.cancelled() => break,
-                            result = tokio::task::spawn_blocking({
-                                let rx = pipeline.extracted_rx.clone();
-                                move || rx.recv()
-                            }) => {
-                                match result {
-                                    Ok(Ok(frame)) => {
-                                        match st.upload_frame(&frame).await {
-                                            Ok((url, key)) => {
-                                                {
-                                                    let mut h = hh.lock().unwrap();
-                                                    h.record_frame_stored(key.clone());
-                                                }
-                                                let partition_key = match pk_field_re.as_str() {
-                                                    "stream_id" => sid.to_string(),
-                                                    "timestamp" => format!("{}", frame.timestamp_seconds),
-                                                    _ => format!("{}", frame.frame_number),
-                                                };
-                                                if let Err(e) = kp.publish_metadata(
-                                                    &frame, &url, st.bucket(), &key,
-                                                    kafka_topic_override_re.as_deref(),
-                                                    &partition_key,
-                                                ).await {
-                                                    tracing::error!(error = %e, stream_id = %sid, "Kafka failed");
-                                                    crate::metrics::KAFKA_ERRORS.increment(1);
-                                                }
-                                                crate::metrics::FRAMES_PROCESSED.increment(1);
-                                            }
-                                            Err(e) => {
-                                                tracing::error!(error = %e, stream_id = %sid, "Upload failed");
-                                                crate::metrics::STORAGE_ERRORS.increment(1);
-                                            }
-                                        }
-                                    }
-                                    _ => break,
-                                }
-                            }
-                        }
-                    }
-                });
+                spawn_consumer_tasks(
+                    stream_id,
+                    pipeline.extracted_rx.clone(),
+                    new_shutdown.clone(),
+                    health_handle.clone(),
+                    storage_client.clone(),
+                    kafka_producer.clone(),
+                    cfg.kafka.as_ref().map(|k| k.topic.clone()),
+                    cfg.kafka.as_ref()
+                        .and_then(|k| k.partition_key_field.clone())
+                        .unwrap_or_else(|| "frame_number".into()),
+                );
 
                 {
                     let new_handle = PipelineHandle {
@@ -347,8 +356,8 @@ impl StreamManager {
     pub fn remove_stream(&self, id: &StreamId) -> bool {
         let handle = self.pipelines.lock().unwrap().remove(id);
         if let Some(mut h) = handle {
-            h.exit_tx.send(Some(PipelineExitReason::UserInitiated)).ok();
             h.shutdown_token.cancel();
+            h.exit_tx.send(Some(PipelineExitReason::UserInitiated)).ok();
             if let Some(jh) = h.join_handle.take() {
                 tokio::task::spawn_blocking(move || {
                     let _ = jh.join();
@@ -375,8 +384,8 @@ impl StreamManager {
     pub fn stop_pipeline(&self, id: &StreamId) -> bool {
         let handle = self.pipelines.lock().unwrap().remove(id);
         if let Some(mut h) = handle {
-            h.exit_tx.send(Some(PipelineExitReason::UserInitiated)).ok();
             h.shutdown_token.cancel();
+            h.exit_tx.send(Some(PipelineExitReason::UserInitiated)).ok();
             if let Some(jh) = h.join_handle.take() {
                 tokio::task::spawn_blocking(move || {
                     let _ = jh.join();
@@ -425,6 +434,7 @@ impl StreamManager {
         let mut pipeline = pipeline::Pipeline::start(
             &info.config, *id, shutdown_token.clone(),
             health_handle.clone(), rules_shared.clone(), core_to_pin,
+            exit_tx.clone(),
         );
 
         self.spawn_frame_consumer(
@@ -469,8 +479,8 @@ impl StreamManager {
     pub fn shutdown_all(&self) {
         let mut pipelines = self.pipelines.lock().unwrap();
         for (id, mut handle) in pipelines.drain() {
-            handle.exit_tx.send(Some(PipelineExitReason::UserInitiated)).ok();
             handle.shutdown_token.cancel();
+            handle.exit_tx.send(Some(PipelineExitReason::UserInitiated)).ok();
             if let Some(jh) = handle.join_handle.take() {
                 let _ = jh.join();
             }

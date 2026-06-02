@@ -27,6 +27,8 @@ RUN ln -s /usr/include/x86_64-linux-gnu/libswscale /usr/include/libswscale && \
     ln -s /usr/include/x86_64-linux-gnu/libavfilter /usr/include/libavfilter && \
     ln -s /usr/include/x86_64-linux-gnu/libpostproc /usr/include/libpostproc && \
     ln -s /usr/include/x86_64-linux-gnu/libswresample /usr/include/libswresample
+ARG https_proxy
+ARG http_proxy
 RUN cargo build --release --bin getframe-worker
 
 # Stage 3: Minimal runtime image

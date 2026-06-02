@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex, RwLock};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 use ffmpeg_next as ffmpeg;
 use crossbeam::channel::Sender;
 use std::collections::BTreeMap;
@@ -7,6 +8,8 @@ use crate::pipeline::rule::{RuleConfig, RuleEngine};
 use crate::stream::health::StreamHealth;
 use crate::types::*;
 use crate::pipeline::{ingest, encode};
+
+const STAGE_REPORT_INTERVAL: u64 = 100;
 
 #[allow(clippy::too_many_arguments)]
 pub fn run_decode_pipeline(
@@ -42,6 +45,13 @@ pub fn run_decode_pipeline(
     let mut first_keyframe_seen = false;
     let mut total_frames_decoded: u64 = 0;
 
+    let mut t_decode_sum: Duration = Duration::ZERO;
+    let mut t_copy_sum: Duration = Duration::ZERO;
+    let mut t_scdet_sum: Duration = Duration::ZERO;
+    let mut t_rule_sum: Duration = Duration::ZERO;
+    let mut t_jpeg_sum: Duration = Duration::ZERO;
+    let mut timing_count: u64 = 0;
+
     let mut rule_engine = {
         let rules = rules_shared.read().unwrap().clone();
         RuleEngine::new(&rules, (time_base.0, time_base.1))
@@ -68,6 +78,7 @@ pub fn run_decode_pipeline(
             continue;
         }
 
+        let mut decode_start = Instant::now();
         if let Err(e) = demuxed.decoder.send_packet(&recv_packet) {
             tracing::warn!(stream_id = %stream_id, error = %e, "Failed to send packet to decoder, skipping");
             continue;
@@ -78,6 +89,9 @@ pub fn run_decode_pipeline(
         loop {
             match demuxed.decoder.receive_frame(&mut frame) {
                 Ok(()) => {
+                    t_decode_sum += decode_start.elapsed();
+                    decode_start = Instant::now();
+
                     total_frames_decoded += 1;
                     frames_decoded_counter.fetch_add(1, Ordering::Relaxed);
                     let pts = frame.pts().unwrap_or(0);
@@ -93,6 +107,7 @@ pub fn run_decode_pipeline(
                     }
 
                     // Scene detection: push raw frame through scdet filter if enabled
+                    let _scd_start = Instant::now();
                     let scene_change_score = if rule_engine.scd_enabled() {
                         match &mut rule_engine.scdet_filter {
                             Some(filter) => filter.filter(&frame).ok(),
@@ -101,7 +116,9 @@ pub fn run_decode_pipeline(
                     } else {
                         None
                     };
+                    t_scdet_sum += _scd_start.elapsed();
 
+                    let _copy_start = Instant::now();
                     let decoded = DecodedFrame {
                         stream_id,
                         pts,
@@ -118,6 +135,7 @@ pub fn run_decode_pipeline(
                         frame_number: total_frames_decoded - 1,
                         scene_change_score,
                     };
+                    t_copy_sum += _copy_start.elapsed();
 
                     pts_queue.insert(pts, decoded);
                     reorder_depth = std::cmp::max(reorder_depth, pts_queue.len());
@@ -140,9 +158,15 @@ pub fn run_decode_pipeline(
                                 }
                             }
 
-                            if rule_engine.evaluate(&ready_frame) {
+                            let _rule_start = Instant::now();
+                            let should_extract = rule_engine.evaluate(&ready_frame);
+                            t_rule_sum += _rule_start.elapsed();
+
+                            if should_extract {
+                                let _jpeg_start = Instant::now();
                                 match encode::encode_jpeg(&ready_frame, jpeg_quality) {
                                     Ok(jpeg_bytes) => {
+                                        t_jpeg_sum += _jpeg_start.elapsed();
                                         let timestamp_seconds = ready_frame.pts as f64 * tb_f;
                                         let extracted = ExtractedFrame {
                                             stream_id,
@@ -176,6 +200,31 @@ pub fn run_decode_pipeline(
                                 h.last_pts = Some(pts);
                             }
                         }
+                    }
+
+                    timing_count += 1;
+                    if timing_count % STAGE_REPORT_INTERVAL == 0 {
+                        let decode_us = (t_decode_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
+                        let copy_us = (t_copy_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
+                        let scdet_us = (t_scdet_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
+                        let rule_us = (t_rule_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
+                        let jpeg_us = (t_jpeg_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
+                        tracing::info!(
+                            stream_id = %stream_id,
+                            decoded = timing_count,
+                            avg_decode_us = decode_us,
+                            avg_copy_us = copy_us,
+                            avg_scdet_us = scdet_us,
+                            avg_rule_us = rule_us,
+                            avg_jpeg_us = jpeg_us,
+                            "Pipeline timing"
+                        );
+                        t_decode_sum = Duration::ZERO;
+                        t_copy_sum = Duration::ZERO;
+                        t_scdet_sum = Duration::ZERO;
+                        t_rule_sum = Duration::ZERO;
+                        t_jpeg_sum = Duration::ZERO;
+                        timing_count = 0;
                     }
                 }
                 Err(ffmpeg::Error::Eof) | Err(ffmpeg::Error::Other { errno: ffmpeg::error::EAGAIN }) => break,

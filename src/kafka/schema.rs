@@ -44,3 +44,97 @@ pub fn frame_metadata_to_avro_value(meta: &FrameMetadata) -> Value {
         ("jpeg_height".into(),     Value::Int(meta.jpeg_height as i32)),
     ])
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::FrameMetadata;
+
+    #[test]
+    fn test_schema_raw_valid_json() {
+        let value: serde_json::Value = serde_json::from_str(SCHEMA_RAW).unwrap();
+        assert_eq!(value["type"], "record");
+        assert_eq!(value["name"], "FrameMetadata");
+        let fields = value["fields"].as_array().unwrap();
+        assert_eq!(fields.len(), 12);
+    }
+
+    #[test]
+    fn test_schema_parses() {
+        let _schema = &*SCHEMA;
+    }
+
+    #[test]
+    fn test_frame_metadata_to_avro_value() {
+        let meta = FrameMetadata {
+            stream_id: "test-stream".into(),
+            source_type: "rtsp".into(),
+            timestamp: "2026-06-01T00:00:00Z".into(),
+            frame_number: 42,
+            rule_trigger: "interval".into(),
+            pts: 1260,
+            storage_url: "http://minio:9000/bucket/key.jpg".into(),
+            storage_bucket: "test-bucket".into(),
+            storage_key: "test-stream/42.jpg".into(),
+            jpeg_size_bytes: 50000,
+            jpeg_width: 1920,
+            jpeg_height: 1080,
+        };
+
+        let value = frame_metadata_to_avro_value(&meta);
+        match value {
+            Value::Record(ref fields) => {
+                let map: std::collections::HashMap<&str, &Value> = fields.iter()
+                    .map(|(k, v)| (k.as_str(), v))
+                    .collect();
+                assert_eq!(map.get("stream_id"), Some(&&Value::String("test-stream".into())));
+                assert_eq!(map.get("frame_number"), Some(&&Value::Long(42)));
+                assert_eq!(map.get("jpeg_width"), Some(&&Value::Int(1920)));
+                assert_eq!(map.get("jpeg_height"), Some(&&Value::Int(1080)));
+                assert_eq!(map.get("rule_trigger"), Some(&&Value::String("interval".into())));
+            }
+            _ => panic!("Expected Value::Record"),
+        }
+    }
+
+    #[test]
+    fn test_avro_roundtrip() {
+        let meta = FrameMetadata {
+            stream_id: "stream-1".into(),
+            source_type: "file".into(),
+            timestamp: "2026-06-01T12:00:00Z".into(),
+            frame_number: 1,
+            rule_trigger: "scene_change".into(),
+            pts: 30,
+            storage_url: "s3://bucket/key.jpg".into(),
+            storage_bucket: "bucket".into(),
+            storage_key: "stream-1/1.jpg".into(),
+            jpeg_size_bytes: 1000,
+            jpeg_width: 640,
+            jpeg_height: 480,
+        };
+
+        let value = frame_metadata_to_avro_value(&meta);
+        let mut writer = apache_avro::Writer::new(&SCHEMA, Vec::new());
+        writer.append(value).unwrap();
+        let encoded = writer.into_inner().unwrap();
+
+        let reader = apache_avro::Reader::new(std::io::Cursor::new(&encoded[..])).unwrap();
+        let values: Vec<apache_avro::types::Value> = reader.collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(values.len(), 1);
+
+        match &values[0] {
+            Value::Record(fields) => {
+                let map: std::collections::HashMap<&str, &Value> = fields.iter()
+                    .map(|(k, v)| (k.as_str(), v))
+                    .collect();
+                assert_eq!(map.get("stream_id"), Some(&&Value::String("stream-1".into())));
+                assert_eq!(map.get("frame_number"), Some(&&Value::Long(1)));
+                assert_eq!(map.get("rule_trigger"), Some(&&Value::String("scene_change".into())));
+                assert_eq!(map.get("jpeg_width"), Some(&&Value::Int(640)));
+                assert_eq!(map.get("jpeg_height"), Some(&&Value::Int(480)));
+            }
+            _ => panic!("Expected Value::Record"),
+        }
+    }
+}

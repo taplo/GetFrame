@@ -340,3 +340,228 @@ fn find_scene_change_threshold(evaluators: &[(RuleConfig, Box<dyn RuleEvaluator>
 
 use ffmpeg_next::format::Pixel as FFmpegPixelFormat;
 use ffmpeg_next::Rational as FFmpegRational;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::DecodedFrame;
+    use uuid::Uuid;
+
+    fn make_frame(pts: i64, frame_number: u64, scene_score: Option<f64>) -> DecodedFrame {
+        DecodedFrame {
+            stream_id: Uuid::nil(),
+            pts,
+            time_base: (1, 30),
+            width: 320,
+            height: 240,
+            y_plane: vec![128; 320 * 240],
+            u_plane: vec![128; 320 * 240 / 4],
+            v_plane: vec![128; 320 * 240 / 4],
+            y_stride: 320,
+            u_stride: 160,
+            v_stride: 160,
+            is_keyframe: true,
+            frame_number,
+            scene_change_score: scene_score,
+        }
+    }
+
+    #[test]
+    fn test_interval_first_frame_always_extracts() {
+        let mut ev = IntervalEvaluator::new(1.0, (1, 30));
+        assert!(ev.should_extract(&make_frame(0, 0, None)));
+    }
+
+    #[test]
+    fn test_interval_respects_gap() {
+        let mut ev = IntervalEvaluator::new(1.0, (1, 30));
+        assert!(ev.should_extract(&make_frame(0, 0, None)));
+        assert!(!ev.should_extract(&make_frame(15, 1, None)));
+    }
+
+    #[test]
+    fn test_interval_extracts_after_gap() {
+        let mut ev = IntervalEvaluator::new(1.0, (1, 30));
+        ev.should_extract(&make_frame(0, 0, None));
+        assert!(ev.should_extract(&make_frame(30, 1, None)));
+    }
+
+    #[test]
+    fn test_fps_rule() {
+        let config = RuleConfig::Fps { fps: 10.0 };
+        assert!(config.description().contains("fps"));
+        let mut ev = create_evaluator(&config, (1, 30));
+        assert!(ev.description().contains("interval"));
+        assert!(ev.should_extract(&make_frame(0, 0, None)));
+        assert!(!ev.should_extract(&make_frame(2, 1, None)));
+        assert!(ev.should_extract(&make_frame(3, 2, None)));
+    }
+
+    #[test]
+    fn test_scene_change_fires_on_high_score() {
+        let mut ev = SceneChangeEvaluator::new(0.3);
+        assert!(!ev.should_extract(&make_frame(0, 0, Some(0.1))));
+        assert!(ev.should_extract(&make_frame(1, 1, Some(0.5))));
+    }
+
+    #[test]
+    fn test_scene_change_no_score_returns_false() {
+        let mut ev = SceneChangeEvaluator::new(0.3);
+        assert!(!ev.should_extract(&make_frame(0, 0, None)));
+    }
+
+    #[test]
+    fn test_scene_change_threshold_clamping() {
+        let ev = SceneChangeEvaluator::new(0.0);
+        assert!(ev.threshold >= 0.001);
+        let ev = SceneChangeEvaluator::new(1.5);
+        assert!(ev.threshold <= 0.999);
+    }
+
+    #[test]
+    fn test_composite_any() {
+        let inner = vec![
+            Box::new(IntervalEvaluator::new(10.0, (1, 30))) as Box<dyn RuleEvaluator>,
+            Box::new(SceneChangeEvaluator::new(0.3)),
+        ];
+        let mut ev = CompositeEvaluator::new(CompositeOperator::Any, inner);
+        assert!(ev.should_extract(&make_frame(0, 0, None)));
+        assert!(ev.should_extract(&make_frame(5, 1, Some(0.9))));
+    }
+
+    #[test]
+    fn test_composite_all() {
+        let inner = vec![
+            Box::new(SceneChangeEvaluator::new(0.3)) as Box<dyn RuleEvaluator>,
+            Box::new(SceneChangeEvaluator::new(0.5)),
+        ];
+        let mut ev = CompositeEvaluator::new(CompositeOperator::All, inner);
+        assert!(!ev.should_extract(&make_frame(0, 0, Some(0.4))));
+        assert!(ev.should_extract(&make_frame(1, 1, Some(0.6))));
+    }
+
+    #[test]
+    fn test_composite_all_with_interval() {
+        let inner = vec![
+            Box::new(IntervalEvaluator::new(1.0, (1, 30))) as Box<dyn RuleEvaluator>,
+            Box::new(SceneChangeEvaluator::new(0.3)),
+        ];
+        let mut ev = CompositeEvaluator::new(CompositeOperator::All, inner);
+        assert!(ev.should_extract(&make_frame(0, 0, Some(0.5))));
+        assert!(!ev.should_extract(&make_frame(15, 1, Some(0.5))));
+    }
+
+    #[test]
+    fn test_rate_limited_passes_within_limit() {
+        let inner = Box::new(IntervalEvaluator::new(0.0, (1, 30)));
+        let mut ev = RateLimitedEvaluator::new(inner, 60);
+        let fps_30 = (0..30).map(|i| make_frame(i as i64, i as u64, None));
+        let extracted: Vec<_> = fps_30.filter(|f| ev.should_extract(f)).collect();
+        assert_eq!(extracted.len(), 30, "Should extract all frames within rate limit");
+    }
+
+    #[test]
+    fn test_interval_description() {
+        let ev = IntervalEvaluator::new(5.0, (1, 30));
+        assert_eq!(ev.description(), "interval/5.0s");
+    }
+
+    #[test]
+    fn test_scene_change_description() {
+        let ev = SceneChangeEvaluator::new(0.42);
+        assert_eq!(ev.description(), "scene-change/0.42");
+    }
+
+    #[test]
+    fn test_fps_description() {
+        let cfg = RuleConfig::Fps { fps: 15.0 };
+        assert!(cfg.description().contains("fps"));
+    }
+
+    #[test]
+    fn test_composite_description() {
+        let cfg = RuleConfig::Composite {
+            operator: CompositeOperator::Any,
+            rules: vec![
+                RuleConfig::Interval { interval_seconds: 1.0 },
+                RuleConfig::SceneChange { threshold: 0.5 },
+            ],
+        };
+        let desc = cfg.description();
+        assert!(desc.contains("composite:any"));
+        assert!(desc.contains("interval"));
+        assert!(desc.contains("scene-change"));
+    }
+
+    #[test]
+    fn test_rule_engine_evaluate() {
+        let rules = vec![
+            RuleConfig::Interval { interval_seconds: 1.0 },
+            RuleConfig::SceneChange { threshold: 0.3 },
+        ];
+        let mut engine = RuleEngine::new(&rules, (1, 30));
+        assert!(engine.evaluate(&make_frame(0, 0, Some(0.1))));
+        assert!(!engine.evaluate(&make_frame(15, 1, None)));
+        assert!(engine.evaluate(&make_frame(30, 2, None)));
+        assert!(engine.evaluate(&make_frame(45, 3, Some(0.5))));
+    }
+
+    #[test]
+    fn test_rule_engine_rebuild() {
+        let rules = vec![RuleConfig::Interval { interval_seconds: 0.5 }];
+        let mut engine = RuleEngine::new(&rules, (1, 30));
+        assert!(engine.evaluate(&make_frame(0, 0, None)));
+        assert!(!engine.evaluate(&make_frame(7, 1, None)));
+
+        let new_rules = vec![RuleConfig::Interval { interval_seconds: 0.1 }];
+        engine.rebuild(&new_rules, (1, 30));
+        assert!(engine.evaluate(&make_frame(15, 2, None)));
+    }
+
+    #[test]
+    fn test_has_scene_change_rule() {
+        let no_scd = vec![RuleConfig::Interval { interval_seconds: 1.0 }];
+        assert!(!has_scene_change_rule(&no_scd));
+
+        let with_scd = vec![RuleConfig::SceneChange { threshold: 0.3 }];
+        assert!(has_scene_change_rule(&with_scd));
+
+        let nested = vec![RuleConfig::Composite {
+            operator: CompositeOperator::Any,
+            rules: vec![RuleConfig::SceneChange { threshold: 0.3 }],
+        }];
+        assert!(has_scene_change_rule(&nested));
+    }
+
+    #[test]
+    fn test_rule_config_serde_roundtrip() {
+        let configs = vec![
+            RuleConfig::Interval { interval_seconds: 1.5 },
+            RuleConfig::Fps { fps: 10.0 },
+            RuleConfig::SceneChange { threshold: 0.4 },
+            RuleConfig::RateLimited {
+                rule: Box::new(RuleConfig::Interval { interval_seconds: 2.0 }),
+                max_per_minute: 30,
+            },
+            RuleConfig::Composite {
+                operator: CompositeOperator::Any,
+                rules: vec![
+                    RuleConfig::Interval { interval_seconds: 5.0 },
+                    RuleConfig::SceneChange { threshold: 0.5 },
+                ],
+            },
+        ];
+        let json = serde_json::to_string(&configs).unwrap();
+        let deserialized: Vec<RuleConfig> = serde_json::from_str(&json).unwrap();
+        assert_eq!(configs.len(), deserialized.len());
+        for (a, b) in configs.iter().zip(deserialized.iter()) {
+            assert_eq!(a.description(), b.description());
+        }
+    }
+
+    #[test]
+    fn test_time_base_zero_does_not_panic() {
+        let ev = IntervalEvaluator::new(1.0, (0, 1));
+        assert_eq!(ev.interval_pts, 0);
+    }
+}

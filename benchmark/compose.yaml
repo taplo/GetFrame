@@ -95,7 +95,7 @@ services:
 
   worker:
     container_name: getframe-bench-worker
-    image: getframe-worker:latest
+    image: ${WORKER_IMAGE:-getframe-worker:latest}
     entrypoint: ["/getframe-worker", "--config", "/etc/getframe/config.yaml"]
     depends_on:
       init-bucket:

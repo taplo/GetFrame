@@ -60,6 +60,13 @@ pub struct KafkaHeaders {
     pub source_type: String,
 }
 
+#[derive(Debug, Clone)]
+pub enum PipelineExitReason {
+    UserInitiated,
+    Error(String),
+    Eof,
+}
+
 #[derive(Debug, thiserror::Error)]
 #[allow(dead_code)]
 pub enum PipelineError {
@@ -73,4 +80,147 @@ pub enum PipelineError {
     Config(String),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+    use bytes::Bytes;
+
+    #[test]
+    fn test_pipeline_exit_reason_user_initiated() {
+        let reason = PipelineExitReason::UserInitiated;
+        match &reason {
+            PipelineExitReason::UserInitiated => (),
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_pipeline_exit_reason_error() {
+        let reason = PipelineExitReason::Error("test error".into());
+        match &reason {
+            PipelineExitReason::Error(msg) => assert_eq!(msg, "test error"),
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_pipeline_exit_reason_eof() {
+        let reason = PipelineExitReason::Eof;
+        match &reason {
+            PipelineExitReason::Eof => (),
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_stream_id_is_uuid() {
+        let id = StreamId::new_v4();
+        assert_eq!(id.to_string().len(), 36);
+    }
+
+    #[test]
+    fn test_decoded_frame_defaults() {
+        let frame = DecodedFrame {
+            stream_id: Uuid::nil(),
+            pts: 0,
+            time_base: (1, 30),
+            width: 640,
+            height: 480,
+            y_plane: vec![0u8; 640 * 480],
+            u_plane: vec![128u8; 640 * 480 / 4],
+            v_plane: vec![128u8; 640 * 480 / 4],
+            y_stride: 640,
+            u_stride: 320,
+            v_stride: 320,
+            is_keyframe: false,
+            frame_number: 0,
+            scene_change_score: None,
+        };
+        assert_eq!(frame.width, 640);
+        assert_eq!(frame.height, 480);
+        assert!(!frame.is_keyframe);
+        assert!(frame.scene_change_score.is_none());
+    }
+
+    #[test]
+    fn test_extracted_frame_creation() {
+        let frame = ExtractedFrame {
+            stream_id: Uuid::new_v4(),
+            frame_number: 42,
+            pts: 1260,
+            timestamp_seconds: 42.0,
+            jpeg_bytes: Bytes::from(vec![0xFF, 0xD8, 0xFF, 0x00]),
+            rule_trigger: "scene_change".into(),
+            jpeg_quality: 85,
+            width: 1920,
+            height: 1080,
+        };
+        assert_eq!(frame.frame_number, 42);
+        assert_eq!(frame.rule_trigger, "scene_change");
+        assert_eq!(frame.width, 1920);
+    }
+
+    #[test]
+    fn test_frame_metadata_serialization() {
+        let meta = FrameMetadata {
+            stream_id: "test-stream".into(),
+            source_type: "rtsp".into(),
+            timestamp: "2026-06-01T00:00:00Z".into(),
+            frame_number: 1,
+            rule_trigger: "interval".into(),
+            pts: 30,
+            storage_url: "http://minio:9000/frames/test.jpg".into(),
+            storage_bucket: "getframe-frames".into(),
+            storage_key: "test-stream/1.jpg".into(),
+            jpeg_size_bytes: 50000,
+            jpeg_width: 1920,
+            jpeg_height: 1080,
+        };
+        let json = serde_json::to_string(&meta).unwrap();
+        assert!(json.contains("test-stream"));
+        assert!(json.contains("getframe-frames"));
+        let deserialized: FrameMetadata = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.stream_id, meta.stream_id);
+        assert_eq!(deserialized.frame_number, meta.frame_number);
+    }
+
+    #[test]
+    fn test_kafka_headers_serialization() {
+        let headers = KafkaHeaders {
+            stream_id: "stream-1".into(),
+            source_type: "rtsp".into(),
+        };
+        let json = serde_json::to_string(&headers).unwrap();
+        assert!(json.contains("stream-1"));
+        let deserialized: KafkaHeaders = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.source_type, "rtsp");
+    }
+
+    #[test]
+    fn test_pipeline_error_ffmpeg() {
+        let err = PipelineError::Ffmpeg(ffmpeg_next::Error::Eof);
+        assert!(err.to_string().contains("FFmpeg error"));
+    }
+
+    #[test]
+    fn test_pipeline_error_storage() {
+        let err = PipelineError::Storage("timeout".into());
+        assert_eq!(err.to_string(), "Storage error: timeout");
+    }
+
+    #[test]
+    fn test_pipeline_error_kafka() {
+        let err = PipelineError::Kafka("broker unavailable".into());
+        assert_eq!(err.to_string(), "Kafka error: broker unavailable");
+    }
+
+    #[test]
+    fn test_pipeline_error_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let err = PipelineError::Io(io_err);
+        assert!(err.to_string().contains("IO error"));
+    }
 }

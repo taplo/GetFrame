@@ -33,6 +33,7 @@ impl Pipeline {
         health_handle: Arc<Mutex<StreamHealth>>,
         rules_shared: Arc<RwLock<Vec<RuleConfig>>>,
         core_id: Option<usize>,
+        exit_tx: tokio::sync::watch::Sender<Option<PipelineExitReason>>,
     ) -> Self {
         let (extract_tx, extract_rx) = bounded::<ExtractedFrame>(DECODE_TO_EXTRACT_CAPACITY);
 
@@ -71,6 +72,11 @@ impl Pipeline {
                     fd,
                     fe,
                 );
+                let reason = match &result {
+                    Ok(()) => PipelineExitReason::Eof,
+                    Err(e) => PipelineExitReason::Error(e.to_string()),
+                };
+                let _ = exit_tx.send(Some(reason));
                 if let Err(e) = result {
                     tracing::error!(error = %e, stream_id = %stream_id_clone, "Pipeline terminated with error");
                 }

@@ -135,9 +135,10 @@ pub fn run_benchmark(
         } else {
             None
         };
+        let (bench_exit_tx, _) = tokio::sync::watch::channel::<Option<crate::types::PipelineExitReason>>(None);
         pipelines.push(pipeline::Pipeline::start(
             &config, sid, shutdown.clone(),
-            health, rules, core_id,
+            health, rules, core_id, bench_exit_tx,
         ));
     }
 

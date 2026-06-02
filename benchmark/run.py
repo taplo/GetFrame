@@ -264,7 +264,7 @@ def run_benchmark():
 
             # Wait for first frame to arrive, or timeout
             waited = 0
-            max_wait = 300 if target_fps <= 1 else STABILIZE_SEC
+            max_wait = 300 if target_fps <= 1 else min(300, max(STABILIZE_SEC, num_streams * 10))
             log(f"waiting for frames (up to {max_wait}s)...", end=" ")
             while waited < max_wait:
                 frames = get_total_frames()
