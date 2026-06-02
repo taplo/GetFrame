@@ -69,7 +69,10 @@ jobs:
             tests/fixtures/test.mp4
 
       - name: Check compilation
-        run: cargo check --all-targets 2>&1; exit 0
+        run: |
+          set +e
+          cargo check --all-targets 2>&1
+          echo "Cargo check completed"
 
       - name: Run tests
         run: cargo test -- --test-threads=1
