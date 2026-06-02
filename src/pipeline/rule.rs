@@ -344,6 +344,7 @@ use ffmpeg_next::Rational as FFmpegRational;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::DecodedFrame;
     use uuid::Uuid;
 
     fn make_frame(pts: i64, frame_number: u64, scene_score: Option<f64>) -> DecodedFrame {
