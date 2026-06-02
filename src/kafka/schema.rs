@@ -48,7 +48,6 @@ pub fn frame_metadata_to_avro_value(meta: &FrameMetadata) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::FrameMetadata;
 
     #[test]
     fn test_schema_raw_valid_json() {

@@ -12,9 +12,8 @@ fn get_test_video_path() -> String {
 #[test]
 fn test_open_video_source() {
     ffmpeg_next::init().unwrap();
-    let result = open_video_source(&get_test_video_path(), "file", "tcp", 1);
-    assert!(result.is_ok(), "open_video_source failed: {:?}", result.err());
-    let demuxed = result.unwrap();
+    let demuxed = open_video_source(&get_test_video_path(), "file", "tcp", 1)
+        .expect("open_video_source failed");
     assert_eq!(demuxed.width, 320);
     assert_eq!(demuxed.height, 240);
 
@@ -41,9 +40,7 @@ async fn test_encode_jpeg() {
         frame_number: 0,
         scene_change_score: None,
     };
-    let jpeg = encode_jpeg(&frame, 85);
-    assert!(jpeg.is_ok(), "encode_jpeg failed: {:?}", jpeg.err());
-    let bytes = jpeg.unwrap();
+    let bytes = encode_jpeg(&frame, 85).unwrap();
     assert!(!bytes.is_empty(), "JPEG output is empty");
     assert_eq!(&bytes[..3], &[0xFF, 0xD8, 0xFF], "Not a valid JPEG header");
 }
@@ -200,7 +197,7 @@ fn test_scene_detection_filter_detects_cut() {
     );
 
     // At least one frame should spike significantly (red→blue transition)
-    let max_score = scores.iter().cloned().fold(0.0f64, f64::max);
+    let max_score = scores.iter().copied().fold(0.0f64, f64::max);
     assert!(
         max_score > 5.0,
         "Scene cut should produce score >5.0, got max {} (scores: {:?})",

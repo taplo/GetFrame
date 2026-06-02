@@ -249,7 +249,6 @@ impl KafkaProducer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::FrameMetadata;
 
     #[test]
     fn test_noop_constructor() {

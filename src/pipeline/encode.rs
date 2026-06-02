@@ -61,9 +61,7 @@ mod tests {
             frame_number: 0,
             scene_change_score: None,
         };
-        let result = encode_jpeg(&frame, 85);
-        assert!(result.is_ok());
-        let bytes = result.unwrap();
+        let bytes = encode_jpeg(&frame, 85).unwrap();
         assert_eq!(&bytes[..3], &[0xFF, 0xD8, 0xFF]);
         assert!(bytes.len() > 100);
     }
@@ -86,9 +84,7 @@ mod tests {
             frame_number: 0,
             scene_change_score: None,
         };
-        let result = encode_jpeg(&frame, 50);
-        assert!(result.is_ok());
-        let bytes = result.unwrap();
+        let bytes = encode_jpeg(&frame, 50).unwrap();
         assert_eq!(&bytes[..3], &[0xFF, 0xD8, 0xFF]);
     }
 

@@ -85,8 +85,6 @@ pub enum PipelineError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
-    use bytes::Bytes;
 
     #[test]
     fn test_pipeline_exit_reason_user_initiated() {
