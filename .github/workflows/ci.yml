@@ -68,11 +68,8 @@ jobs:
             -c:v libx264 -pix_fmt yuv420p -frames:v 5 \
             tests/fixtures/test.mp4
 
-      - name: Check compilation
-        run: |
-          set +e
-          cargo check --all-targets 2>&1
-          echo "Cargo check completed"
+      - name: Check compilation with clippy
+        run: cargo clippy --all-targets -- -D warnings 2>&1
 
       - name: Run tests
         run: cargo test -- --test-threads=1
