@@ -180,3 +180,79 @@ impl MetricsRecorder {
         0.0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_prometheus_text() -> &'static str {
+        r#"# HELP getframe_frames_processed_total Total frames processed
+# TYPE getframe_frames_processed_total counter
+getframe_frames_processed_total 42
+# HELP getframe_kafka_messages_total Total Kafka messages published
+# TYPE getframe_kafka_messages_total counter
+getframe_kafka_messages_total 7
+getframe_kafka_messages_total{stream_id="abc"} 3
+# HELP getframe_streams_active Active streams
+# TYPE getframe_streams_active gauge
+getframe_streams_active 5
+getframe_decode_errors_total 2
+getframe_storage_errors_total 1
+getframe_kafka_errors_total 0
+getframe_streams_claimed 3"#
+    }
+
+    #[test]
+    fn test_extract_counter_found() {
+        assert_eq!(MetricsRecorder::extract_counter(sample_prometheus_text(), "getframe_frames_processed_total"), 42);
+    }
+
+    #[test]
+    fn test_extract_counter_with_label() {
+        assert_eq!(MetricsRecorder::extract_counter(sample_prometheus_text(), "getframe_kafka_messages_total"), 7);
+    }
+
+    #[test]
+    fn test_extract_counter_not_found() {
+        assert_eq!(MetricsRecorder::extract_counter(sample_prometheus_text(), "getframe_nonexistent"), 0);
+    }
+
+    #[test]
+    fn test_extract_counter_partial_prefix_skipped() {
+        assert_eq!(MetricsRecorder::extract_counter(sample_prometheus_text(), "getframe_decode_errors"), 0);
+    }
+
+    #[test]
+    fn test_extract_gauge_found() {
+        assert!((MetricsRecorder::extract_gauge(sample_prometheus_text(), "getframe_streams_active") - 5.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_extract_gauge_not_found() {
+        assert!((MetricsRecorder::extract_gauge(sample_prometheus_text(), "getframe_nonexistent") - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_extract_all_metrics_present() {
+        let raw = sample_prometheus_text();
+        assert_eq!(MetricsRecorder::extract_counter(raw, "getframe_frames_processed_total"), 42);
+        assert_eq!(MetricsRecorder::extract_counter(raw, "getframe_kafka_messages_total"), 7);
+        assert_eq!(MetricsRecorder::extract_counter(raw, "getframe_decode_errors_total"), 2);
+        assert_eq!(MetricsRecorder::extract_counter(raw, "getframe_storage_errors_total"), 1);
+        assert_eq!(MetricsRecorder::extract_counter(raw, "getframe_kafka_errors_total"), 0);
+        assert!((MetricsRecorder::extract_gauge(raw, "getframe_streams_active") - 5.0).abs() < f64::EPSILON);
+        assert!((MetricsRecorder::extract_gauge(raw, "getframe_streams_claimed") - 3.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_extract_handles_empty_string() {
+        assert_eq!(MetricsRecorder::extract_counter("", "getframe_frames_processed_total"), 0);
+        assert!((MetricsRecorder::extract_gauge("", "getframe_streams_active") - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_extract_handles_only_comments() {
+        let raw = "# this is a comment\n# another comment\n";
+        assert_eq!(MetricsRecorder::extract_counter(raw, "getframe_frames_processed_total"), 0);
+    }
+}

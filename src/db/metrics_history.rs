@@ -79,3 +79,106 @@ pub async fn cleanup_old(pool: &MySqlPool, days: i32) -> Result<u64, sqlx::Error
     .await?;
     Ok(result.rows_affected())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{TimeZone, Utc};
+
+    fn make_point(kafka_delta: i32, frames_delta: i32) -> MetricsPoint {
+        MetricsPoint {
+            recorded_at: Utc.with_ymd_and_hms(2026, 6, 3, 12, 0, 0).unwrap(),
+            streams_active: 10,
+            frames_delta,
+            errors_decode: 0,
+            errors_storage: 1,
+            errors_kafka: 2,
+            kafka_delta,
+            streams_claimed: 8,
+        }
+    }
+
+    #[test]
+    fn test_metrics_point_defaults() {
+        let p = make_point(5, 100);
+        assert_eq!(p.kafka_delta, 5);
+        assert_eq!(p.frames_delta, 100);
+        assert_eq!(p.errors_kafka, 2);
+    }
+
+    #[test]
+    fn test_metrics_snapshot_kafka_ps_computation() {
+        let p = make_point(30, 60);
+        let s = MetricsSnapshot {
+            frames_ps: p.frames_delta as f64 / 60.0,
+            recorded_at: p.recorded_at,
+            streams_active: p.streams_active,
+            frames_delta: p.frames_delta,
+            errors_decode: p.errors_decode,
+            errors_storage: p.errors_storage,
+            errors_kafka: p.errors_kafka,
+            kafka_ps: p.kafka_delta as f64 / 60.0,
+            streams_claimed: p.streams_claimed,
+        };
+        assert!((s.kafka_ps - 0.5).abs() < f64::EPSILON);
+        assert!((s.frames_ps - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_metrics_snapshot_zero_delta() {
+        let p = make_point(0, 0);
+        let s = MetricsSnapshot {
+            frames_ps: p.frames_delta as f64 / 60.0,
+            recorded_at: p.recorded_at,
+            streams_active: p.streams_active,
+            frames_delta: p.frames_delta,
+            errors_decode: p.errors_decode,
+            errors_storage: p.errors_storage,
+            errors_kafka: p.errors_kafka,
+            kafka_ps: p.kafka_delta as f64 / 60.0,
+            streams_claimed: p.streams_claimed,
+        };
+        assert!((s.kafka_ps - 0.0).abs() < f64::EPSILON);
+        assert!((s.frames_ps - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_metrics_snapshot_large_delta() {
+        let p = make_point(600, 0);
+        let s = MetricsSnapshot {
+            frames_ps: p.frames_delta as f64 / 60.0,
+            recorded_at: p.recorded_at,
+            streams_active: p.streams_active,
+            frames_delta: p.frames_delta,
+            errors_decode: p.errors_decode,
+            errors_storage: p.errors_storage,
+            errors_kafka: p.errors_kafka,
+            kafka_ps: p.kafka_delta as f64 / 60.0,
+            streams_claimed: p.streams_claimed,
+        };
+        assert!((s.kafka_ps - 10.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_from_row_mapping_matches_snapshot() {
+        let p = make_point(45, 120);
+        let r = MetricsSnapshot {
+            frames_ps: p.frames_delta as f64 / 60.0,
+            recorded_at: p.recorded_at,
+            streams_active: p.streams_active,
+            frames_delta: p.frames_delta,
+            errors_decode: p.errors_decode,
+            errors_storage: p.errors_storage,
+            errors_kafka: p.errors_kafka,
+            kafka_ps: p.kafka_delta as f64 / 60.0,
+            streams_claimed: p.streams_claimed,
+        };
+        assert_eq!(r.streams_active, 10);
+        assert_eq!(r.streams_claimed, 8);
+        assert!((r.kafka_ps - 0.75).abs() < f64::EPSILON);
+        assert!((r.frames_ps - 2.0).abs() < f64::EPSILON);
+        assert_eq!(r.errors_decode, 0);
+        assert_eq!(r.errors_storage, 1);
+        assert_eq!(r.errors_kafka, 2);
+    }
+}

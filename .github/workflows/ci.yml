@@ -63,10 +63,6 @@ jobs:
       - name: Generate test video fixtures
         run: |
           mkdir -p tests/fixtures
-          ffmpeg -y -f lavfi -i "testsrc=duration=1:size=320x240:rate=5" \
-            -f lavfi -i "sine=frequency=440:duration=1" \
-            -c:v libx264 -pix_fmt yuv420p -frames:v 5 \
-            tests/fixtures/test.mp4
           ffmpeg -y -f lavfi -i "testsrc=duration=6:size=320x240:rate=5" \
             -f lavfi -i "color=c=blue:size=320x240:rate=5:d=6" \
             -filter_complex "[0:v][1:v]concat=n=2:v=1:a=0" \
@@ -80,6 +76,34 @@ jobs:
         run: cargo test -- --test-threads=1
         env:
           DATABASE_URL_TEST: mysql://root@localhost:3306/getframe_test
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+        working-directory: web
+
+      - name: Run unit tests
+        run: npx vitest run
+        working-directory: web
+
+      - name: Production build
+        run: npm run build
+        working-directory: web
 
   docker:
     needs: test

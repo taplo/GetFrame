@@ -69,3 +69,94 @@ pub async fn history_handler(
 
     Ok(Json(MetricsHistoryResponse { points }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_metrics_point_response_serialization() {
+        let p = MetricsPointResponse {
+            recorded_at: "2026-06-03T12:00:00+00:00".into(),
+            streams_active: 10,
+            frames_ps: 1.5,
+            errors_decode: 0,
+            errors_storage: 1,
+            errors_kafka: 2,
+            kafka_ps: 0.5,
+            streams_claimed: 8,
+        };
+        let json = serde_json::to_value(&p).unwrap();
+        assert_eq!(json["recorded_at"], "2026-06-03T12:00:00+00:00");
+        assert_eq!(json["streams_active"], 10);
+        assert!((json["frames_ps"].as_f64().unwrap() - 1.5).abs() < f64::EPSILON);
+        assert!((json["kafka_ps"].as_f64().unwrap() - 0.5).abs() < f64::EPSILON);
+        assert_eq!(json["errors_kafka"], 2);
+        assert_eq!(json["streams_claimed"], 8);
+        assert!(json.get("kafka_ps").is_some());
+    }
+
+    #[test]
+    fn test_metrics_point_response_zero_kafka() {
+        let p = MetricsPointResponse {
+            recorded_at: "2026-06-03T12:00:00+00:00".into(),
+            streams_active: 5,
+            frames_ps: 0.0,
+            errors_decode: 0,
+            errors_storage: 0,
+            errors_kafka: 0,
+            kafka_ps: 0.0,
+            streams_claimed: 5,
+        };
+        let json = serde_json::to_value(&p).unwrap();
+        assert!((json["kafka_ps"].as_f64().unwrap() - 0.0).abs() < f64::EPSILON);
+        assert!((json["frames_ps"].as_f64().unwrap() - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_metrics_history_response_wrapper() {
+        let resp = MetricsHistoryResponse {
+            points: vec![
+                MetricsPointResponse {
+                    recorded_at: "2026-06-03T12:00:00+00:00".into(),
+                    streams_active: 10,
+                    frames_ps: 2.0,
+                    errors_decode: 0,
+                    errors_storage: 1,
+                    errors_kafka: 2,
+                    kafka_ps: 0.5,
+                    streams_claimed: 8,
+                },
+            ],
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert!(json["points"].is_array());
+        assert_eq!(json["points"][0]["kafka_ps"], 0.5);
+        assert_eq!(json["points"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_metrics_point_response_all_fields_present() {
+        let p = MetricsPointResponse {
+            recorded_at: "2026-06-03T12:00:00+00:00".into(),
+            streams_active: 10,
+            frames_ps: 1.5,
+            errors_decode: 0,
+            errors_storage: 1,
+            errors_kafka: 2,
+            kafka_ps: 0.5,
+            streams_claimed: 8,
+        };
+        let json = serde_json::to_value(&p).unwrap();
+        let obj = json.as_object().unwrap();
+        assert!(obj.contains_key("recorded_at"));
+        assert!(obj.contains_key("streams_active"));
+        assert!(obj.contains_key("frames_ps"));
+        assert!(obj.contains_key("errors_decode"));
+        assert!(obj.contains_key("errors_storage"));
+        assert!(obj.contains_key("errors_kafka"));
+        assert!(obj.contains_key("kafka_ps"));
+        assert!(obj.contains_key("streams_claimed"));
+        assert_eq!(obj.len(), 8);
+    }
+}
