@@ -14,8 +14,8 @@ fn test_open_video_source() {
     ffmpeg_next::init().unwrap();
     let demuxed = open_video_source(&get_test_video_path(), "file", "tcp", 1)
         .expect("open_video_source failed");
-    assert_eq!(demuxed.width, 320);
-    assert_eq!(demuxed.height, 240);
+    assert_eq!(demuxed.width, 960);
+    assert_eq!(demuxed.height, 540);
 
     assert!(demuxed.time_base.0 > 0 && demuxed.time_base.1 > 0);
 }
@@ -96,8 +96,8 @@ async fn test_decode_pipeline_full() {
         frames.len()
     );
     for (i, f) in frames.iter().enumerate() {
-        assert_eq!(f.width, 320);
-        assert_eq!(f.height, 240);
+        assert_eq!(f.width, 960);
+        assert_eq!(f.height, 540);
         assert!(!f.jpeg_bytes.is_empty());
         if i > 0 {
             assert!(f.frame_number > frames[i - 1].frame_number, "Frame number should increase");

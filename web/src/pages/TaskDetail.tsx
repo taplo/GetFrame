@@ -114,7 +114,7 @@ const [events, setEvents] = useState<TaskEvent[]>([])
                 {task.frames_extracted && task.frames_extracted > 0 ? (
                   (() => {
                     const expected = Math.round(
-                      ((task.started_at ? (task.stopped_at ? new Date(task.stopped_at).getTime() - new Date(task.started_at).getTime() : Date.now() - new Date(task.started_at).getTime()) : 0) / 1000) * (task.rules?.[0]?.type === "Interval" ? 1 / (task.rules[0] as any).interval_seconds || 1 : 1)
+                      ((task.started_at ? (task.stopped_at ? new Date(task.stopped_at).getTime() - new Date(task.started_at).getTime() : Date.now() - new Date(task.started_at).getTime()) : 0) / 1000) * (task.rules?.[0]?.type === "interval" ? 1 / (task.rules[0] as any).interval_seconds || 1 : 1)
                     )
                     const actual = task.frames_extracted
                     const ratio = expected > 0 ? actual / expected : 1

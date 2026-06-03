@@ -5,8 +5,6 @@ import type { TaskEvent } from "@/api/tasks"
 
 function makeEvent(event_type: string, i: number): TaskEvent {
   return {
-    id: `ev-${i}`,
-    task_id: "t1",
     event_type,
     recorded_at: `2026-06-03T12:${String(i).padStart(2, "0")}:00Z`,
     event_data: null,
@@ -80,8 +78,6 @@ describe("EventTimeline", () => {
 
   it("renders event data message when present", () => {
     const events: TaskEvent[] = [{
-      id: "ev-1",
-      task_id: "t1",
       event_type: "Error",
       recorded_at: "2026-06-03T12:00:00Z",
       event_data: { message: "connection timeout" },
