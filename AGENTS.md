@@ -147,6 +147,15 @@ ssh taplo@192.168.3.123 'cd /home/taplo/getframe/benchmark && WORKER_IMAGE=getfr
   - 消除 ~6MB/frame 的 RGB 临时缓冲区分配（1920×1080×3）
   - yuvutils-rs 依赖已从 Cargo.toml 中移除
 
+### Fix 9 — Cargo.lock UTF-16LE 编码修复（2026-06-03）
+- **文件**: `Cargo.lock`
+- **问题**: CI 报错 `failed to read file: Cargo.lock` / `stream did not contain valid UTF-8`。本地 Windows 编辑器将 Cargo.lock 保存为 UTF-16LE（`FF FE` BOM），Linux CI 上 Cargo 无法解析
+- **修复**: 将 Cargo.lock 从 UTF-16LE 转换为 UTF-8（无 BOM）
+- **根因**: `core.autocrlf=true` 的 Windows git 环境在编辑时没有保持原 UTF-8 编码
+- **连带修复**: 新增两个 clippy lint 修复（Rust 1.96.0 新 lint）：
+  - `src/pipeline/decode.rs:206`: `timing_count % STAGE_REPORT_INTERVAL == 0` → `timing_count.is_multiple_of(STAGE_REPORT_INTERVAL)`（`manual_is_multiple_of`）
+  - `src/stream/mod.rs:24`: `spawn_consumer_tasks` 函数添加 `#[allow(clippy::too_many_arguments)]`（`too_many_arguments` 阈值降至 7）
+
 ## Benchmark 结果
 
 ### 时序流水线优化
