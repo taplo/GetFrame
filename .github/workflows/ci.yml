@@ -67,10 +67,10 @@ jobs:
             -f lavfi -i "sine=frequency=440:duration=1" \
             -c:v libx264 -pix_fmt yuv420p -frames:v 5 \
             tests/fixtures/test.mp4
-          ffmpeg -y -f lavfi -i "testsrc=duration=1:size=320x240:rate=5" \
-            -f lavfi -i "color=c=blue:size=320x240:rate=5:d=1" \
-            -filter_complex "[0:v]setpts=PTS-STARTPTS[scene1];[1:v]setpts=PTS-STARTPTS+1/TB[scene2];[scene1][scene2]concat=n=2:v=1:a=0" \
-            -c:v libx264 -pix_fmt yuv420p -frames:v 10 \
+          ffmpeg -y -f lavfi -i "testsrc=duration=6:size=320x240:rate=5" \
+            -f lavfi -i "color=c=blue:size=320x240:rate=5:d=6" \
+            -filter_complex "[0:v][1:v]concat=n=2:v=1:a=0" \
+            -c:v libx264 -pix_fmt yuv420p -frames:v 60 \
             tests/fixtures/scene_change.mp4
 
       - name: Check compilation with clippy
