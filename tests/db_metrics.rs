@@ -11,6 +11,7 @@ fn make_point(recorded_at: chrono::DateTime<Utc>) -> MetricsPoint {
         errors_decode: 1,
         errors_storage: 0,
         errors_kafka: 0,
+        kafka_delta: 0,
         streams_claimed: 3,
     }
 }
@@ -25,6 +26,7 @@ async fn test_db_metrics_insert_and_query() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].streams_active, 5);
     assert!((rows[0].frames_ps - 5.0).abs() < 0.001);
+    assert!((rows[0].kafka_ps - 0.0).abs() < 0.001);
 }
 
 #[tokio::test]
