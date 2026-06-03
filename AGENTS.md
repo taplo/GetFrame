@@ -27,11 +27,11 @@
 
 ## 开发与部署环境
 
-### VM (开发/编译, 192.168.3.26)
+### VM (开发/编译, 192.168.3.122)
 
 | 属性 | 值 |
 |------|-----|
-| **地址** | `192.168.3.26:22` |
+| **地址** | `192.168.3.122:22` |
 | **SSH 用户** | `taplo` |
 | **认证方式** | SSH 密钥 (`~/.ssh/id_ed25519`) |
 | **OS** | Ubuntu 26.04 LTS (Resolute Raccoon) |
@@ -45,11 +45,11 @@
 | **时区** | Asia/Shanghai |
 | **项目路径** | `/home/taplo/getframe` |
 
-### VM (压测服务器, 192.168.3.31)
+### VM (压测服务器, 192.168.3.123)
 
 | 属性 | 值 |
 |------|-----|
-| **地址** | `192.168.3.31:22` |
+| **地址** | `192.168.3.123:22` |
 | **SSH 用户** | `taplo` |
 | **认证方式** | SSH 密钥 (`~/.ssh/id_ed25519`) |
 | **OS** | Ubuntu 26.04 LTS (Resolute Raccoon) |
@@ -96,20 +96,20 @@
 ### 文件同步工作流
 
 ```bash
-# 从 Windows 本地同步变更到 VM (192.168.3.26)
-scp Cargo.toml Cargo.lock taplo@192.168.3.26:/home/taplo/getframe/
-scp -r src/ taplo@192.168.3.26:/home/taplo/getframe/
-scp -r migrations/ taplo@192.168.3.26:/home/taplo/getframe/
-scp config.docker.yaml docker-compose.yml config.example.yaml taplo@192.168.3.26:/home/taplo/getframe/
+# 从 Windows 本地同步变更到 VM (192.168.3.122)
+scp Cargo.toml Cargo.lock taplo@192.168.3.122:/home/taplo/getframe/
+scp -r src/ taplo@192.168.3.122:/home/taplo/getframe/
+scp -r migrations/ taplo@192.168.3.122:/home/taplo/getframe/
+scp config.docker.yaml docker-compose.yml config.example.yaml taplo@192.168.3.122:/home/taplo/getframe/
 
 # VM 上构建（或使用持久容器加速）
-ssh taplo@192.168.3.26 'cd /home/taplo/getframe && docker buildx build --network host -t getframe-worker:latest .'
+ssh taplo@192.168.3.122 'cd /home/taplo/getframe && docker buildx build --network host -t getframe-worker:latest .'
 
-# 同步到压测服务器 (192.168.3.31)
-scp src/pipeline/decode.rs taplo@192.168.3.31:/home/taplo/getframe/src/pipeline/decode.rs
+# 同步到压测服务器 (192.168.3.123)
+scp src/pipeline/decode.rs taplo@192.168.3.123:/home/taplo/getframe/src/pipeline/decode.rs
 
 # 压测服务器上执行
-ssh taplo@192.168.3.31 'cd /home/taplo/getframe/benchmark && WORKER_IMAGE=getframe-worker-tmp:latest python3 run.py'
+ssh taplo@192.168.3.123 'cd /home/taplo/getframe/benchmark && WORKER_IMAGE=getframe-worker-tmp:latest python3 run.py'
 ```
 
 ## 已知 Bug 与修复索引

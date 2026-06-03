@@ -21,6 +21,7 @@ struct UploadResult {
     partition_key: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_consumer_tasks(
     stream_id: StreamId,
     extracted_rx: crossbeam::channel::Receiver<ExtractedFrame>,

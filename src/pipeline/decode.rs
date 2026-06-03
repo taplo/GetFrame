@@ -203,7 +203,7 @@ pub fn run_decode_pipeline(
                     }
 
                     timing_count += 1;
-                    if timing_count % STAGE_REPORT_INTERVAL == 0 {
+                    if timing_count.is_multiple_of(STAGE_REPORT_INTERVAL) {
                         let decode_us = (t_decode_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
                         let copy_us = (t_copy_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
                         let scdet_us = (t_scdet_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
