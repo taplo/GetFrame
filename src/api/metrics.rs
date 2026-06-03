@@ -25,6 +25,7 @@ pub struct MetricsPointResponse {
     pub errors_decode: i32,
     pub errors_storage: i32,
     pub errors_kafka: i32,
+    pub kafka_ps: f64,
     pub streams_claimed: i32,
 }
 
@@ -61,6 +62,7 @@ pub async fn history_handler(
             errors_decode: r.errors_decode,
             errors_storage: r.errors_storage,
             errors_kafka: r.errors_kafka,
+            kafka_ps: r.kafka_ps,
             streams_claimed: r.streams_claimed,
         }
     }).collect();

@@ -9,6 +9,7 @@ pub struct MetricsPoint {
     pub errors_decode: i32,
     pub errors_storage: i32,
     pub errors_kafka: i32,
+    pub kafka_delta: i32,
     pub streams_claimed: i32,
 }
 
@@ -22,14 +23,15 @@ pub struct MetricsSnapshot {
     pub errors_decode: i32,
     pub errors_storage: i32,
     pub errors_kafka: i32,
+    pub kafka_ps: f64,
     pub streams_claimed: i32,
 }
 
 pub async fn insert(pool: &MySqlPool, point: &MetricsPoint) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"INSERT INTO metrics_history (recorded_at, streams_active, frames_delta,
-              errors_decode, errors_storage, errors_kafka, streams_claimed)
-           VALUES (?, ?, ?, ?, ?, ?, ?)"#
+              errors_decode, errors_storage, errors_kafka, kafka_delta, streams_claimed)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#
     )
     .bind(point.recorded_at)
     .bind(point.streams_active)
@@ -37,6 +39,7 @@ pub async fn insert(pool: &MySqlPool, point: &MetricsPoint) -> Result<(), sqlx::
     .bind(point.errors_decode)
     .bind(point.errors_storage)
     .bind(point.errors_kafka)
+    .bind(point.kafka_delta)
     .bind(point.streams_claimed)
     .execute(pool)
     .await?;
@@ -46,7 +49,7 @@ pub async fn insert(pool: &MySqlPool, point: &MetricsPoint) -> Result<(), sqlx::
 pub async fn query_recent(pool: &MySqlPool, minutes: i64) -> Result<Vec<MetricsSnapshot>, sqlx::Error> {
     let rows = sqlx::query_as::<_, MetricsPoint>(
         r#"SELECT recorded_at, streams_active, frames_delta,
-                  errors_decode, errors_storage, errors_kafka, streams_claimed
+                  errors_decode, errors_storage, errors_kafka, kafka_delta, streams_claimed
            FROM metrics_history
            WHERE recorded_at >= NOW() - INTERVAL ? MINUTE
            ORDER BY recorded_at ASC"#
@@ -62,6 +65,7 @@ pub async fn query_recent(pool: &MySqlPool, minutes: i64) -> Result<Vec<MetricsS
         errors_decode: r.errors_decode,
         errors_storage: r.errors_storage,
         errors_kafka: r.errors_kafka,
+        kafka_ps: r.kafka_delta as f64 / 60.0,
         streams_claimed: r.streams_claimed,
     }).collect())
 }

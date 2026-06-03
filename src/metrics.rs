@@ -20,6 +20,9 @@ pub static STORAGE_ERRORS: LazyLock<metrics::Counter> = LazyLock::new(|| {
 pub static KAFKA_ERRORS: LazyLock<metrics::Counter> = LazyLock::new(|| {
     counter!("getframe_kafka_errors_total")
 });
+pub static KAFKA_MESSAGES: LazyLock<metrics::Counter> = LazyLock::new(|| {
+    counter!("getframe_kafka_messages_total")
+});
 
 pub static CLAIMED_STREAMS: LazyLock<metrics::Gauge> = LazyLock::new(|| {
     gauge!("getframe_streams_claimed")
@@ -60,6 +63,7 @@ pub struct MetricsRecorder {
     last_decode: i64,
     last_storage: i64,
     last_kafka: i64,
+    last_kafka_messages: i64,
 }
 
 impl MetricsRecorder {
@@ -70,7 +74,8 @@ impl MetricsRecorder {
         let last_decode = Self::extract_counter(&raw, "getframe_decode_errors_total");
         let last_storage = Self::extract_counter(&raw, "getframe_storage_errors_total");
         let last_kafka = Self::extract_counter(&raw, "getframe_kafka_errors_total");
-        Self { pool, handle, last_frames, last_decode, last_storage, last_kafka }
+        let last_kafka_messages = Self::extract_counter(&raw, "getframe_kafka_messages_total");
+        Self { pool, handle, last_frames, last_decode, last_storage, last_kafka, last_kafka_messages }
     }
 
     pub fn sample(&mut self) -> crate::db::metrics_history::MetricsPoint {
@@ -81,6 +86,7 @@ impl MetricsRecorder {
         let dec = Self::extract_counter(&raw, "getframe_decode_errors_total");
         let st = Self::extract_counter(&raw, "getframe_storage_errors_total");
         let kaf = Self::extract_counter(&raw, "getframe_kafka_errors_total");
+        let kaf_msg = Self::extract_counter(&raw, "getframe_kafka_messages_total");
         let active = Self::extract_gauge(&raw, "getframe_streams_active") as i32;
         let claimed = Self::extract_gauge(&raw, "getframe_streams_claimed") as i32;
 
@@ -88,11 +94,13 @@ impl MetricsRecorder {
         let errors_decode = (dec - self.last_decode).max(0) as i32;
         let errors_storage = (st - self.last_storage).max(0) as i32;
         let errors_kafka = (kaf - self.last_kafka).max(0) as i32;
+        let kafka_delta = (kaf_msg - self.last_kafka_messages).max(0) as i32;
 
         self.last_frames = frames;
         self.last_decode = dec;
         self.last_storage = st;
         self.last_kafka = kaf;
+        self.last_kafka_messages = kaf_msg;
 
         crate::db::metrics_history::MetricsPoint {
             recorded_at: now,
@@ -101,6 +109,7 @@ impl MetricsRecorder {
             errors_decode,
             errors_storage,
             errors_kafka,
+            kafka_delta,
             streams_claimed: claimed,
         }
     }

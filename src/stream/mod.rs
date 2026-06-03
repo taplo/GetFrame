@@ -110,6 +110,7 @@ fn spawn_consumer_tasks(
                 crate::metrics::KAFKA_ERRORS.increment(1);
             }
             crate::metrics::FRAMES_PROCESSED.increment(1);
+            crate::metrics::KAFKA_MESSAGES.increment(1);
         }
         tracing::info!(stream_id = %stream_id, "Publish task shut down");
     });
