@@ -18,6 +18,7 @@ export function MetricsChart({ points }: MetricsChartProps) {
     errDecode: p.errors_decode,
     errStorage: p.errors_storage,
     errKafka: p.errors_kafka,
+    kafkaRate: Math.round(p.kafka_ps * 10) / 10,
   })), [points])
 
   if (data.length === 0) {
@@ -55,7 +56,7 @@ export function MetricsChart({ points }: MetricsChartProps) {
         </ResponsiveContainer>
       </div>
 
-      <div className="bg-white border rounded-xl p-5 shadow-sm col-span-2">
+      <div className="bg-white border rounded-xl p-5 shadow-sm">
         <h3 className="font-semibold mb-3">错误率（60s 窗口）</h3>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={data}>
@@ -68,6 +69,20 @@ export function MetricsChart({ points }: MetricsChartProps) {
             <Bar dataKey="errStorage" fill="#f59e0b" name="存储" stackId="a" />
             <Bar dataKey="errKafka" fill="#6366f1" name="Kafka" stackId="a" />
           </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="bg-white border rounded-xl p-5 shadow-sm">
+        <h3 className="font-semibold mb-3">Kafka 投递率</h3>
+        <ResponsiveContainer width="100%" height={200}>
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="time" fontSize={12} />
+            <YAxis fontSize={12} />
+            <Tooltip />
+            <Legend />
+            <Line type="monotone" dataKey="kafkaRate" stroke="#8b5cf6" name="消息/秒" strokeWidth={2} dot={false} />
+          </LineChart>
         </ResponsiveContainer>
       </div>
     </div>

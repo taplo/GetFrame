@@ -108,6 +108,25 @@ const [events, setEvents] = useState<TaskEvent[]>([])
             <div className="flex justify-between"><dt className="text-gray-500">创建时间</dt><dd>{task.created_at ? new Date(task.created_at).toLocaleString("zh-CN") : "-"}</dd></div>
             {task.started_at && <div className="flex justify-between"><dt className="text-gray-500">开始时间</dt><dd>{new Date(task.started_at).toLocaleString("zh-CN")}</dd></div>}
             {task.stopped_at && <div className="flex justify-between"><dt className="text-gray-500">停止时间</dt><dd>{new Date(task.stopped_at).toLocaleString("zh-CN")}</dd></div>}
+            <div className="flex justify-between items-center">
+              <dt className="text-gray-500">帧率稳定性</dt>
+              <dd>
+                {task.frames_extracted && task.frames_extracted > 0 ? (
+                  (() => {
+                    const expected = Math.round(
+                      ((task.started_at ? (task.stopped_at ? new Date(task.stopped_at).getTime() - new Date(task.started_at).getTime() : Date.now() - new Date(task.started_at).getTime()) : 0) / 1000) * (task.rules?.[0]?.type === "Interval" ? 1 / (task.rules[0] as any).interval_seconds || 1 : 1)
+                    )
+                    const actual = task.frames_extracted
+                    const ratio = expected > 0 ? actual / expected : 1
+                    const color = ratio >= 0.95 ? "text-green-700 bg-green-50" : ratio >= 0.8 ? "text-yellow-700 bg-yellow-50" : "text-red-700 bg-red-50"
+                    const label = ratio >= 0.95 ? "稳定" : ratio >= 0.8 ? "轻微漂移" : "不稳定"
+                    return <span className={`px-2 py-0.5 rounded text-xs font-medium ${color}`}>{label} ({Math.round(ratio * 100)}%)</span>
+                  })()
+                ) : (
+                  <span className="text-gray-400">-</span>
+                )}
+              </dd>
+            </div>
           </dl>
         </div>
 
@@ -121,6 +140,36 @@ const [events, setEvents] = useState<TaskEvent[]>([])
           />
         </div>
       </div>
+
+      {task.frames_extracted && task.frames_extracted > 0 && events.length > 1 && (
+        <div className="bg-white border rounded-xl p-5 shadow-sm">
+          <h2 className="font-semibold mb-3">抽取吞吐量</h2>
+          <div className="flex items-end gap-1 h-20">
+            {(() => {
+              const buckets = new Map<string, number>()
+              events.forEach((ev) => {
+                if (ev.event_type === "Started" || ev.event_type === "Resumed") {
+                  const t = new Date(ev.recorded_at)
+                  const key = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")} ${String(t.getHours()).padStart(2, "0")}:${String(Math.floor(t.getMinutes() / 5) * 5).padStart(2, "0")}`
+                  buckets.set(key, (buckets.get(key) || 0) + 1)
+                }
+              })
+              const max = Math.max(...buckets.values(), 1)
+              return Array.from(buckets.entries()).map(([time, count]) => (
+                <div key={time} className="flex-1 flex flex-col items-center gap-1">
+                  <div
+                    className="w-full bg-purple-500 rounded-t"
+                    style={{ height: `${(count / max) * 100}%`, minHeight: "4px" }}
+                    title={`${time}: ${count} 事件`}
+                  />
+                  <span className="text-[10px] text-gray-400 truncate w-full text-center">{time.split(" ")[1]}</span>
+                </div>
+              ))
+            })()}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">每 5 分钟时间槽的事件分布</p>
+        </div>
+      )}
 
       <div className="bg-white border rounded-xl p-5 shadow-sm">
         <h2 className="font-semibold mb-3">事件时间线</h2>

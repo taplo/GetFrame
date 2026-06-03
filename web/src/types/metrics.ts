@@ -5,6 +5,7 @@ export interface MetricsPoint {
   errors_decode: number
   errors_storage: number
   errors_kafka: number
+  kafka_ps: number
   streams_claimed: number
 }
 

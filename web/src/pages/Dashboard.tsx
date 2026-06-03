@@ -9,6 +9,7 @@ import type { StreamInfo } from "@/types/stream"
 import type { TaskInfo } from "@/types/task"
 import type { MetricsPoint } from "@/types/metrics"
 import { MetricsChart } from "@/components/MetricsChart"
+import { SystemHealth } from "@/components/SystemHealth"
 
 export function Dashboard() {
   const [streams, setStreams] = useState<StreamInfo[]>([])
@@ -41,6 +42,8 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">控制面板</h1>
+
+      <SystemHealth />
 
       <div className="flex items-center justify-between">
         <div className="grid grid-cols-4 gap-4 flex-1">

@@ -1,7 +1,9 @@
+import { useState } from "react"
 import type { TaskEvent } from "@/api/tasks"
 
 interface EventTimelineProps {
   events: TaskEvent[]
+  pageSize?: number
 }
 
 const labelMap: Record<string, string> = {
@@ -20,7 +22,9 @@ const colorMap: Record<string, string> = {
   Error: "text-red-600 border-red-400",
 }
 
-export function EventTimeline({ events }: EventTimelineProps) {
+export function EventTimeline({ events, pageSize = 20 }: EventTimelineProps) {
+  const [visibleCount, setVisibleCount] = useState(pageSize)
+
   if (events.length === 0) {
     return <div className="text-gray-400 text-sm text-center py-8">暂无事件记录</div>
   }
@@ -30,7 +34,7 @@ export function EventTimeline({ events }: EventTimelineProps) {
       <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-gray-200" />
 
       <div className="space-y-4">
-        {events.map((ev, i) => (
+        {events.slice(0, visibleCount).map((ev, i) => (
           <div key={i} className="flex gap-4 pl-4 relative">
             <div className={`absolute left-2.5 top-1 w-3 h-3 rounded-full border-2 bg-white ${colorMap[ev.event_type] || "border-gray-300"}`} />
             <div className="flex-1 min-w-0">
@@ -51,6 +55,15 @@ export function EventTimeline({ events }: EventTimelineProps) {
           </div>
         ))}
       </div>
+
+      {visibleCount < events.length && (
+        <button
+          onClick={() => setVisibleCount((c) => c + pageSize)}
+          className="mt-4 w-full text-center text-sm text-gray-500 py-2 border border-dashed rounded-lg hover:bg-gray-50"
+        >
+          加载更多 ({events.length - visibleCount} 条剩余)
+        </button>
+      )}
     </div>
   )
 }
