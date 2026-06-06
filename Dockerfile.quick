@@ -1,0 +1,17 @@
+FROM debian:bookworm-slim
+RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates libavcodec59 libavformat59 libavutil57 \
+        libswscale6 libavdevice59 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /usr/share/man /usr/share/doc \
+      /usr/share/locale /usr/share/info /var/cache/apt/archives/*.deb
+
+COPY getframe-worker-new /getframe-worker
+COPY web/dist /web/dist
+COPY config.example.yaml /etc/getframe/config.yaml
+EXPOSE 8080
+ENTRYPOINT ["/getframe-worker"]
+CMD ["--config", "/etc/getframe/config.yaml"]

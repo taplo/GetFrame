@@ -13,6 +13,8 @@ pub struct Config {
     pub database: Option<DatabaseConfig>,
     #[serde(default)]
     pub worker: Option<WorkerConfig>,
+    #[serde(default)]
+    pub auth: Option<AuthConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,8 +41,20 @@ pub struct WorkerConfig {
 }
 
 fn default_heartbeat_interval() -> u64 { 15 }
-fn default_claim_batch_size() -> u32 { 5 }
+fn default_claim_batch_size() -> u32 { 50 }
 fn default_claim_timeout() -> u64 { 30 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthConfig {
+    #[serde(default)]
+    pub jwt_secret: String,
+    #[serde(default = "default_jwt_expiry")]
+    pub jwt_expiry_seconds: u64,
+    #[serde(default)]
+    pub initial_admin_password: String,
+}
+
+fn default_jwt_expiry() -> u64 { 86400 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct StreamConfig {

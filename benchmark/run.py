@@ -223,10 +223,6 @@ def run_benchmark():
     log("Cleaning up previous benchmark containers...")
     sh("docker rm -f $(docker ps -aq --filter name=getframe-bench- 2>/dev/null) 2>/dev/null; true")
 
-    #log("Pulling Docker images...")
-    #sh(f"docker pull {FFMPEG_IMAGE}")
-    #sh("docker pull bluenviron/mediamtx:latest")
-
     for target_fps in TARGET_FPS_VALUES:
         global TARGET_FPS
         TARGET_FPS = target_fps
@@ -238,7 +234,7 @@ def run_benchmark():
         log(f"{'='*60}")
 
         log("Starting mediamtx, minio, and worker...")
-        sh(f"docker compose -f {COMPOSE_FILE} up -d")
+        sh(f"docker compose -f {COMPOSE_FILE} up -d --pull missing")
         if not wait_for_worker():
             log("ERROR: worker did not become ready")
             sys.exit(1)
@@ -293,7 +289,7 @@ def run_benchmark():
 
             # Restart compose for next iteration
             if num_streams != STREAM_COUNTS[-1]:
-                sh(f"docker compose -f {COMPOSE_FILE} up -d")
+                sh(f"docker compose -f {COMPOSE_FILE} up -d --pull missing")
                 if not wait_for_worker():
                     log("ERROR: worker failed to restart")
                     sys.exit(1)

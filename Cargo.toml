@@ -34,8 +34,13 @@ aws-sdk-s3 = { version = "1", features = ["behavior-version-latest"] }
 aws-config = "1"
 aws-credential-types = "1"
 sqlx = { version = "0.8", features = ["runtime-tokio", "mysql", "uuid", "chrono", "json", "migrate"] }
-metrics = "0.23"
+metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
+jsonwebtoken = "9"
+argon2 = "0.5"
+sha2 = "0.10"
+rand = "0.8"
+hex = "0.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"

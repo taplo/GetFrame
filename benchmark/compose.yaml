@@ -96,6 +96,7 @@ services:
   worker:
     container_name: getframe-bench-worker
     image: ${WORKER_IMAGE:-getframe-worker:latest}
+    pull_policy: missing
     entrypoint: ["/getframe-worker", "--config", "/etc/getframe/config.yaml"]
     depends_on:
       init-bucket:

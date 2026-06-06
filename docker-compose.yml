@@ -140,7 +140,6 @@ services:
       - grafanadata:/var/lib/grafana
       - ./monitoring/grafana-provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./monitoring/grafana-provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./monitoring/grafana-dashboard.json:/etc/grafana/provisioning/dashboards/getframe-dashboard.json:ro
     depends_on:
       prometheus:
         condition: service_started
