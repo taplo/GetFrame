@@ -4,6 +4,7 @@ import { Dashboard } from "@/pages/Dashboard"
 import { StreamsPage } from "@/pages/Streams"
 import { TasksPage } from "@/pages/Tasks"
 import { TaskDetail } from "@/pages/TaskDetail"
+import ActivityLog from "@/pages/ActivityLog"
 
 export function App() {
   return (
@@ -14,6 +15,7 @@ export function App() {
           <Route path="streams" element={<StreamsPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="tasks/:id" element={<TaskDetail />} />
+          <Route path="activity" element={<ActivityLog />} />
         </Route>
       </Routes>
     </BrowserRouter>

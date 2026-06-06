@@ -5,6 +5,7 @@ const navItems = [
   { to: "/", label: "控制面板" },
   { to: "/streams", label: "流管理" },
   { to: "/tasks", label: "任务管理" },
+  { to: "/activity", label: "活动日志" },
 ]
 
 export function Layout() {
