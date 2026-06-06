@@ -199,6 +199,10 @@ pub fn run_decode_pipeline(
                                 h.frames_extracted = frame_number;
                                 h.last_pts = Some(pts);
                             }
+
+                            let id_label = stream_id.to_string();
+                            metrics::gauge!("getframe_stream_frames_decoded", "stream_id" => id_label.clone()).set(total_frames_decoded as f64);
+                            metrics::gauge!("getframe_stream_frames_extracted", "stream_id" => id_label.clone()).set(frame_number as f64);
                         }
                     }
 
@@ -209,6 +213,10 @@ pub fn run_decode_pipeline(
                         let scdet_us = (t_scdet_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
                         let rule_us = (t_rule_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
                         let jpeg_us = (t_jpeg_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
+
+                        let id_label = stream_id.to_string();
+                        metrics::gauge!("getframe_stream_decode_latency_ms", "stream_id" => id_label.clone()).set(decode_us as f64 / 1000.0);
+                        metrics::gauge!("getframe_stream_jpeg_latency_ms", "stream_id" => id_label).set(jpeg_us as f64 / 1000.0);
                         tracing::info!(
                             stream_id = %stream_id,
                             decoded = timing_count,

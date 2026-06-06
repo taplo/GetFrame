@@ -9,6 +9,7 @@ import os
 import sys
 import urllib.request
 import urllib.error
+import argparse
 from pathlib import Path
 
 COMPOSE_DIR = Path(__file__).parent
@@ -22,6 +23,8 @@ MEDIAMTX_HOST = "mediamtx"
 MEDIAMTX_PORT = "8554"
 
 STREAM_COUNTS = [1, 2, 4, 8, 12, 16, 24, 32]
+SCALE_STREAM_COUNTS = [32, 48, 64, 96, 128, 200]
+SCALE_THRESHOLD = 48
 TARGET_FPS_VALUES = [1]
 STABILIZE_SEC = 30
 SAMPLE_COUNT = 6
@@ -54,25 +57,12 @@ def wait_for_worker(timeout: int = 60) -> bool:
     return False
 
 
-def get_metric_value(text: str, name: str) -> float:
-    """Extract a Prometheus counter or gauge value from /metrics text."""
-    for line in text.splitlines():
-        if line.startswith(name) and not line.startswith("#"):
-            parts = line.split()
-            if len(parts) >= 2:
-                try:
-                    return float(parts[-1])
-                except ValueError:
-                    pass
-    return 0.0
-
-
-def get_docker_stats() -> dict:
-    """Return CPU% and memory MB for worker container."""
+def get_docker_stats(container: str = "getframe-bench-worker") -> dict:
+    """Return CPU% and memory MB for a container."""
     out = sh(
         "docker stats --no-stream --format "
         '"{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" '
-        "getframe-bench-worker"
+        f"{container}"
     )
     if not out:
         return {"cpu": 0.0, "mem_mb": 0.0}
@@ -95,12 +85,12 @@ def start_ffmpeg(stream_id: int) -> None:
     """Start a single ffmpeg container pushing synthetic RTSP."""
     name = f"getframe-bench-ffmpeg-{stream_id}"
     stream_url = f"rtsp://{MEDIAMTX_HOST}:{MEDIAMTX_PORT}/stream-{stream_id}"
-    sh(f"docker rm -f {name} 2>/dev/null")  # remove any leftover
+    sh(f"docker rm -f {name} 2>/dev/null")
     sh(
         f"docker run -d --name {name} --network benchmark_bench-net "
         f"--restart no --entrypoint ffmpeg {FFMPEG_IMAGE} "
         f"-re -f lavfi -i testsrc2=size=1920x1080:rate={TARGET_FPS} "
-        f"-c:v libx264 -preset ultrafast -tune zerolatency "
+        f"-c:v libx264 -preset ultrafast -tune zerolatency -g 1 "
         f"-f rtsp {stream_url}"
     )
 
@@ -111,13 +101,35 @@ def stop_ffmpeg(stream_num: int) -> None:
     sh(f"docker rm -f {name} 2>/dev/null")
 
 
-def register_stream(stream_id: int) -> str | None:
+def start_scale_source() -> None:
+    """Start a single ffmpeg feeding the shared RTSP source for relay mode."""
+    name = "getframe-bench-ffmpeg-scale"
+    stream_url = f"rtsp://{MEDIAMTX_HOST}:{MEDIAMTX_PORT}/bench-source"
+    sh(f"docker rm -f {name} 2>/dev/null")
+    sh(
+        f"docker run -d --name {name} --network benchmark_bench-net "
+        f"--restart no --entrypoint ffmpeg {FFMPEG_IMAGE} "
+        f"-re -f lavfi -i testsrc2=size=1920x1080:rate={TARGET_FPS} "
+        f"-c:v libx264 -preset ultrafast -tune zerolatency -g 1 "
+        f"-f rtsp {stream_url}"
+    )
+    time.sleep(3)  # wait for ffmpeg to connect and publish
+
+
+def stop_scale_source() -> None:
+    """Stop the shared scale test RTSP source."""
+    sh("docker rm -f getframe-bench-ffmpeg-scale 2>/dev/null")
+
+
+def register_stream(stream_id: int, source_url: str | None = None) -> str | None:
     """Register RTSP stream with worker via API. Returns stream ID on success."""
     url = f"{WORKER_API}/api/v1/streams"
     interval = 1.0 / TARGET_FPS
+    if source_url is None:
+        source_url = f"rtsp://{MEDIAMTX_HOST}:{MEDIAMTX_PORT}/stream-{stream_id}"
     payload = {
         "config": {
-            "source_url": f"rtsp://{MEDIAMTX_HOST}:{MEDIAMTX_PORT}/stream-{stream_id}",
+            "source_url": source_url,
             "source_type": "rtsp",
             "extract_interval_seconds": interval,
             "rtsp_transport": "tcp",
@@ -138,18 +150,6 @@ def register_stream(stream_id: int) -> str | None:
     except urllib.error.URLError as e:
         print(f"[ERR]", end=" ", flush=True)
         return None
-
-
-def unregister_stream(stream_id: str) -> None:
-    """Remove stream from worker via API."""
-    try:
-        req = urllib.request.Request(
-            f"{WORKER_API}/api/v1/streams/{stream_id}",
-            method="DELETE"
-        )
-        urllib.request.urlopen(req, timeout=10)
-    except Exception:
-        pass
 
 
 def get_total_frames() -> int:
@@ -216,21 +216,24 @@ def write_csv(csv_path: str, samples: list, append: bool = False):
         w.writerows(samples)
 
 
-def run_benchmark():
+def run_benchmark(scale: bool = False):
     """Main benchmark orchestrator."""
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
     log("Cleaning up previous benchmark containers...")
     sh("docker rm -f $(docker ps -aq --filter name=getframe-bench- 2>/dev/null) 2>/dev/null; true")
 
+    stream_counts = SCALE_STREAM_COUNTS if scale else STREAM_COUNTS
+    label = "scale" if scale else "baseline"
+
     for target_fps in TARGET_FPS_VALUES:
         global TARGET_FPS
         TARGET_FPS = target_fps
 
-        csv_path = RESULTS_DIR / f"benchmark-{target_fps}fps.csv"
+        csv_path = RESULTS_DIR / f"benchmark-{target_fps}fps-{label}.csv"
 
         log(f"\n{'='*60}")
-        log(f"Benchmark: target {target_fps}fps")
+        log(f"Benchmark ({label}): target {target_fps}fps")
         log(f"{'='*60}")
 
         log("Starting mediamtx, minio, and worker...")
@@ -240,12 +243,17 @@ def run_benchmark():
             sys.exit(1)
         log("ready")
 
-        for num_streams in STREAM_COUNTS:
+        for num_streams in stream_counts:
             log(f"\u2192 {num_streams} streams...", end=" ")
 
-            # Start ffmpeg containers
-            for sid in range(1, num_streams + 1):
-                start_ffmpeg(sid)
+            # In scale (relay) mode, start one shared ffmpeg source
+            use_relay = scale and num_streams >= SCALE_THRESHOLD
+            if use_relay:
+                log(f"[relay mode]", end=" ")
+                start_scale_source()
+            else:
+                for sid in range(1, num_streams + 1):
+                    start_ffmpeg(sid)
 
             log("waiting 5s for ffmpeg...", end=" ")
             time.sleep(5)
@@ -253,7 +261,11 @@ def run_benchmark():
             # Register streams with worker
             registered_ids = []
             for sid in range(1, num_streams + 1):
-                wid = register_stream(sid)
+                source_url = (
+                    f"rtsp://{MEDIAMTX_HOST}:{MEDIAMTX_PORT}/bench-source"
+                    if use_relay else None
+                )
+                wid = register_stream(sid, source_url=source_url)
                 if wid:
                     registered_ids.append(wid)
             log(f"registered {len(registered_ids)}")
@@ -271,24 +283,25 @@ def run_benchmark():
                 waited += 5
             else:
                 log(f"no frames after {max_wait}s", end=" ")
-            # Extra stabilization after first frame
             time.sleep(STABILIZE_SEC)
 
             # Collect metrics
             log("sampling", end=" ")
             samples = collect_metrics(target_fps, num_streams)
 
-            # Write incremental results so partial data survives
+            # Write incremental results
             write_csv(csv_path, samples, append=os.path.exists(csv_path))
             log(f" wrote {len(samples)} samples to {csv_path}")
 
-            # Stop ffmpeg, restart compose for a clean worker next round
-            for sid in range(1, num_streams + 1):
-                stop_ffmpeg(sid)
-            sh(f"docker compose -f {COMPOSE_FILE} down")
+            # Cleanup
+            if use_relay:
+                stop_scale_source()
+            else:
+                for sid in range(1, num_streams + 1):
+                    stop_ffmpeg(sid)
+            sh(f"docker compose -f {COMPOSE_FILE} down -v")
 
-            # Restart compose for next iteration
-            if num_streams != STREAM_COUNTS[-1]:
+            if num_streams != stream_counts[-1]:
                 sh(f"docker compose -f {COMPOSE_FILE} up -d --pull missing")
                 if not wait_for_worker():
                     log("ERROR: worker failed to restart")
@@ -298,11 +311,19 @@ def run_benchmark():
         log(f"Results saved to {csv_path}")
 
     log("Cleaning up...")
-    sh(f"docker compose -f {COMPOSE_FILE} down")
+    sh(f"docker compose -f {COMPOSE_FILE} down -v")
     log(f"Done. Results in {RESULTS_DIR}/")
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="getframe-worker stream processing benchmark")
+    parser.add_argument("--scale", action="store_true",
+                        help="Run large-scale relay benchmark (32-200 streams)")
+    args = parser.parse_args()
+
     print("Benchmark: getframe-worker stream processing capacity")
     print(f"Python: {sys.version}")
-    run_benchmark()
+    mode = "SCALE (200+ relay)" if args.scale else "baseline (1-32 streams)"
+    print(f"Mode: {mode}")
+    run_benchmark(scale=args.scale)

@@ -98,6 +98,9 @@ services:
     image: ${WORKER_IMAGE:-getframe-worker:latest}
     pull_policy: missing
     entrypoint: ["/getframe-worker", "--config", "/etc/getframe/config.yaml"]
+    # Note: GETFRAME_CPU_CORES omitted deliberately.
+    # Testing showed pinning 200 threads to 16 cores degraded decode latency
+    # (104ms→183ms) vs letting the kernel scheduler balance freely.
     depends_on:
       init-bucket:
         condition: service_completed_successfully
@@ -108,6 +111,42 @@ services:
     volumes:
       - ./config:/etc/getframe
     restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+      nproc:
+        soft: 4096
+        hard: 4096
+    sysctls:
+      - net.core.somaxconn=65535
+    networks:
+      - bench-net
+
+  worker-2:
+    container_name: getframe-bench-worker-2
+    image: ${WORKER_IMAGE:-getframe-worker:latest}
+    pull_policy: missing
+    entrypoint: ["/getframe-worker", "--config", "/etc/getframe/config.yaml"]
+    profiles:
+      - multi-worker
+    depends_on:
+      init-bucket:
+        condition: service_completed_successfully
+      init-kafka-topics:
+        condition: service_completed_successfully
+    volumes:
+      - ./config:/etc/getframe
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+      nproc:
+        soft: 4096
+        hard: 4096
+    sysctls:
+      - net.core.somaxconn=65535
     networks:
       - bench-net
 

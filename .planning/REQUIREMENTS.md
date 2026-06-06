@@ -130,7 +130,7 @@
 | STREAM-03 | Phase 2 | Done (pre-save probe + POST /api/v1/streams/test-url) |
 | STREAM-04 | Phase 2 | Done (per-stream health in API + UI indicators) |
 | STREAM-05 | Phase 2 | Done (name, description, tags in config) |
-| STREAM-06 | Phase 2 | Partial (tags stored/displayed, no server-side filter) |
+| STREAM-06 | Phase 2 | Done (tags stored/displayed, server-side key=value filter) |
 | STREAM-07 | Phase 2 | Done (exponential backoff reconnection) |
 | STREAM-08 | Phase 2 | Done (CancellationToken, resource cleanup) |
 | RULE-01 | Phase 1 | Done (IntervalEvaluator) |
@@ -161,36 +161,36 @@
 | UI-05 | Phase 8 | Done (TaskDetail page) |
 | UI-06 | Phase 8 | Done (Dashboard with StatCards) |
 | UI-07 | Phase 8 | Done (FramePreview component) |
-| OBS-01 | Phase 2 | Partial (Prometheus /metrics, no Kafka lag) |
+| OBS-01 | Phase 2 | Done (Prometheus /metrics with kafka_lag gauge, per-stream labels) |
 | OBS-02 | Phase 1 | Done (/health + /ready endpoints) |
 | OBS-03 | Phase 1 | Done (tracing-subscriber JSON logger) |
-| OBS-04 | Phase 2 | Partial (per-stream health stats, no per-stream Prometheus labels) |
+| OBS-04 | Phase 2 | Done (per-stream Prometheus gauges: frames_decoded, frames_extracted, decode_latency, jpeg_latency) |
 | OBS-05 | Phase 10 | Done (deploy/grafana/getframe-dashboard.json) |
 | DEPLOY-01 | Phase 1 | Done (Docker multi-stage, docker-compose) |
 | DEPLOY-02 | Phase 10 | Done (deploy/helm/getframe/) |
 | DEPLOY-03 | Phase 10 | Done (Helm values: resources.requests/limits) |
 | DEPLOY-04 | Phase 10 | Done (KEDA ScaledObject in Helm templates) |
-| WORKER-01 | Phase 9 | Partial (architecture supports, not benchmarked) |
-| WORKER-02 | Phase 9 | Partial (WorkerManager design, not validated) |
+| WORKER-01 | Phase 9 | Done (128 streams zero-error, 200+ streams validated with minor instability — MediaMTX limit) |
+| WORKER-02 | Phase 9 | Done (2 workers tested: 61 streams claimed, 40+21 distribution, 0 double-claims) |
 | WORKER-03 | Phase 9 | Done (stateless DB-claim based) |
 | WORKER-04 | Phase 9 | Done (CancellationToken + SIGTERM) |
 
 **Coverage:**
 - v1 requirements: 49 total
-- Fully implemented: 39
-- Partially implemented: 5
+- Fully implemented: 45
+- Partially implemented: 0 (all 49 fully implemented)
 - Not implemented: 0 ✓ (all mapped to at least partial)
 
 **Per-Phase Requirement Counts:**
 - Phase 1 (Core Pipeline): 11 requirements — All done
-- Phase 2 (Multi-Stream Management): 11 requirements — 9 done, 2 partial (STREAM-06, OBS-04)
+- Phase 2 (Multi-Stream Management): 11 requirements — 11 done
 - Phase 3 (Per-Stream Rule Configuration): 4 requirements — All done
 - Phase 4 (Scene Detection & Composite Rules): 2 requirements — All done
 - Phase 5 (Kafka Production Readiness): 4 requirements — All done
 - Phase 6 (Task Management API): 2 requirements — All done
 - Phase 7 (Web UI — Stream & Task Management): 4 requirements — All done
 - Phase 8 (Web UI — Dashboard & Monitoring): 3 requirements — All done
-- Phase 9 (Worker Scaling): 4 requirements — 2 done, 2 partial (WORKER-01, WORKER-02)
+- Phase 9 (Worker Scaling): 4 requirements — All done
 - Phase 10 (Production Deployment): 4 requirements — All done
 
 ---

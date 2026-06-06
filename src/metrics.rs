@@ -35,6 +35,12 @@ pub static KAFKA_LAG: LazyLock<metrics::Gauge> = LazyLock::new(|| {
 });
 
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+pub fn force_prometheus() -> PrometheusHandle {
+    tracing::debug!("Forcing Prometheus recorder initialization");
+    let handle = (*PROMETHEUS_HANDLE).clone();
+    tracing::debug!("Prometheus recorder initialized");
+    handle
+}
 static PROMETHEUS_HANDLE: LazyLock<PrometheusHandle> = LazyLock::new(|| {
     PrometheusBuilder::new()
         .install_recorder()
@@ -44,7 +50,7 @@ static PROMETHEUS_HANDLE: LazyLock<PrometheusHandle> = LazyLock::new(|| {
 pub async fn metrics_handler() -> Result<String, (axum::http::StatusCode, &'static str)> {
     match tokio::time::timeout(
         std::time::Duration::from_secs(10),
-        tokio::task::spawn_blocking(move || PROMETHEUS_HANDLE.render()),
+        tokio::task::spawn_blocking(|| PROMETHEUS_HANDLE.render()),
     )
     .await
     {

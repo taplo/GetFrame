@@ -61,6 +61,12 @@ impl TaskManager {
         };
 
         self.registry.add(id, info.clone());
+        self.record_activity(
+            "task.created",
+            &id,
+            format!("创建任务 \"{}\"", info.name),
+            None,
+        );
         self.persist_task(&info);
         info
     }
@@ -93,6 +99,12 @@ impl TaskManager {
         task.started_at = Some(Utc::now());
         self.registry.update_status(&id, TaskStatus::Running);
         self.record_event(id, "Started", None);
+        self.record_activity(
+            "task.started",
+            &id,
+            format!("启动任务 \"{}\"", task.name),
+            None,
+        );
         self.persist_task(&task);
         Ok(task)
     }
@@ -117,6 +129,12 @@ impl TaskManager {
         task.status = TaskStatus::Paused;
         self.registry.update_status(&id, TaskStatus::Paused);
         self.record_event(id, "Paused", None);
+        self.record_activity(
+            "task.paused",
+            &id,
+            format!("暂停任务 \"{}\"", task.name),
+            None,
+        );
         self.persist_task(&task);
         Ok(task)
     }
@@ -148,6 +166,12 @@ impl TaskManager {
         task.status = TaskStatus::Running;
         self.registry.update_status(&id, TaskStatus::Running);
         self.record_event(id, "Resumed", None);
+        self.record_activity(
+            "task.resumed",
+            &id,
+            format!("恢复任务 \"{}\"", task.name),
+            None,
+        );
         self.persist_task(&task);
         Ok(task)
     }
@@ -173,6 +197,12 @@ impl TaskManager {
         task.stopped_at = Some(Utc::now());
         self.registry.update_status(&id, TaskStatus::Stopped);
         self.record_event(id, "Stopped", None);
+        self.record_activity(
+            "task.stopped",
+            &id,
+            format!("停止任务 \"{}\"", task.name),
+            None,
+        );
         self.persist_task(&task);
         Ok(task)
     }
@@ -182,7 +212,16 @@ impl TaskManager {
             self.stream_manager.stop_pipeline(&run_id);
             self.stream_manager.registry().remove(&run_id);
         }
-        self.registry.remove(&id).is_some()
+        let removed = self.registry.remove(&id).is_some();
+        if removed {
+            self.record_activity(
+                "task.deleted",
+                &id,
+                format!("删除任务 (ID: {})", id),
+                None,
+            );
+        }
+        removed
     }
 
     pub fn get_task(&self, id: TaskId) -> Option<TaskInfo> {
@@ -202,6 +241,27 @@ impl TaskManager {
                 if let Err(e) = crate::db::task_events::insert(&p, &et, &task_id, event_data).await {
                     tracing::warn!(error = %e, task_id = %task_id, event_type = %et, "Failed to record task event");
                 }
+            }
+        });
+    }
+
+    fn record_activity(&self, event_type: &str, task_id: &TaskId, description: String, details: Option<serde_json::Value>) {
+        let pool = self.db_pool.clone();
+        let et = event_type.to_owned();
+        let tid = task_id.to_string();
+        tokio::spawn(async move {
+            if let Some(p) = pool {
+                let row = crate::db::activity_log::ActivityLogRow {
+                    id: 0,
+                    event_type: et,
+                    resource_type: "task".into(),
+                    resource_id: Some(tid),
+                    actor: "system".into(),
+                    description,
+                    details,
+                    recorded_at: chrono::Utc::now(),
+                };
+                let _ = crate::db::activity_log::insert(&p, &row).await;
             }
         });
     }
