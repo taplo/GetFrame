@@ -157,6 +157,35 @@ impl StreamManager {
         self
     }
 
+    fn record_activity(
+        &self,
+        event_type: &str,
+        resource_id: Option<&str>,
+        actor: &str,
+        description: String,
+        details: Option<serde_json::Value>,
+    ) {
+        let pool = self.db_pool.clone();
+        let et = event_type.to_owned();
+        let rid = resource_id.map(|s| s.to_owned());
+        let a = actor.to_owned();
+        tokio::spawn(async move {
+            if let Some(p) = pool {
+                let row = crate::db::activity_log::ActivityLogRow {
+                    id: 0,
+                    event_type: et,
+                    resource_type: "stream".into(),
+                    resource_id: rid,
+                    actor: a,
+                    description,
+                    details,
+                    recorded_at: chrono::Utc::now(),
+                };
+                let _ = crate::db::activity_log::insert(&p, &row).await;
+            }
+        });
+    }
+
     pub fn registry(&self) -> &StreamRegistry {
         &self.registry
     }
@@ -209,6 +238,22 @@ impl StreamManager {
 
         crate::metrics::STREAMS_ACTIVE.increment(1.0);
         crate::metrics::STREAMS_TOTAL.increment(1);
+
+        let stream_name = config.name.clone();
+        let sid = id;
+        {
+            let cfg = self.registry.get(&sid).map(|i| i.config.clone());
+            self.record_activity(
+                "stream.created",
+                Some(&sid.to_string()),
+                "system",
+                format!("创建流 \"{}\"", stream_name),
+                cfg.map(|c| serde_json::json!({
+                    "source_url": c.source_url,
+                    "source_type": c.source_type,
+                })),
+            );
+        }
 
         id
     }
@@ -365,7 +410,16 @@ impl StreamManager {
                     let _ = jh.join();
                 });
             }
+            let stream_name = self.registry.get(id).map(|i| i.config.name.clone()).unwrap_or_default();
             self.registry.remove(id);
+
+            self.record_activity(
+                "stream.deleted",
+                Some(&id.to_string()),
+                "system",
+                format!("删除流 \"{}\"", stream_name),
+                None,
+            );
 
             let pool = self.db_pool.clone();
             let sid = *id;
@@ -472,6 +526,15 @@ impl StreamManager {
                 let _ = crate::db::streams::upsert(&p, &sid, &config).await;
             }
         });
+
+        let stream_name = config.name.clone();
+        self.record_activity(
+            "stream.updated",
+            Some(&id.to_string()),
+            "system",
+            format!("更新流 \"{}\" 配置", stream_name),
+            None,
+        );
     }
 
     pub fn storage_client(&self) -> Arc<crate::storage::StorageClient> {
