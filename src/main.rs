@@ -8,6 +8,7 @@ mod health;
 mod stream;
 mod task;
 mod api;
+mod auth;
 mod metrics;
 mod db;
 mod worker;
@@ -88,6 +89,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    let _ = crate::metrics::force_prometheus();
+
     let kafka_producer = Arc::new(kafka::KafkaProducer::new(&config.kafka)?);
 
     let db_pool = if let Some(db_cfg) = &config.database {
@@ -102,6 +105,46 @@ async fn main() -> anyhow::Result<()> {
                 None
             }
         }
+    } else {
+        None
+    };
+
+    let auth_state: Option<crate::auth::AuthState> = if let (Some(pool), Some(auth_cfg)) = (&db_pool, &config.auth) {
+        let secret = if auth_cfg.jwt_secret.is_empty() {
+            let gen_secret = uuid::Uuid::new_v4().to_string();
+            tracing::warn!(jwt_secret = %gen_secret, "JWT_SECRET not configured, using auto-generated value. Set auth.jwt_secret in config.yaml");
+            gen_secret
+        } else {
+            auth_cfg.jwt_secret.clone()
+        };
+
+        let state = crate::auth::AuthState {
+            pool: Arc::new(pool.clone()),
+            jwt_secret: Arc::new(secret),
+            jwt_expiry: auth_cfg.jwt_expiry_seconds,
+        };
+
+        if !auth_cfg.initial_admin_password.is_empty() {
+            match crate::auth::models::find_user_by_username(pool, "admin").await {
+                Ok(Some(_)) => {
+                    tracing::info!("Admin user already exists, skipping bootstrap");
+                }
+                Ok(None) => {
+                    match crate::auth::models::hash_password(&auth_cfg.initial_admin_password) {
+                        Ok(hash) => {
+                            match crate::auth::models::create_user(pool, "admin", &hash, "admin").await {
+                                Ok(id) => tracing::info!(user_id = %id, "Admin user bootstrapped from config"),
+                                Err(e) => tracing::error!(error = %e, "Failed to create admin user"),
+                            }
+                        }
+                        Err(e) => tracing::error!(error = %e, "Failed to hash admin password"),
+                    }
+                }
+                Err(e) => tracing::error!(error = %e, "Failed to check admin user existence"),
+            }
+        }
+
+        Some(state)
     } else {
         None
     };
@@ -215,11 +258,20 @@ async fn main() -> anyhow::Result<()> {
     let api_router = api::api_router(stream_manager.clone(), task_manager, db_pool.clone());
     let api_doc = crate::api::ApiDoc::openapi();
 
-    let app = health_router
+    let mut app = health_router
         .merge(api_router)
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api_doc))
         .route("/metrics", axum::routing::get(metrics::metrics_handler))
         .fallback_service(ServeDir::new("web/dist"));
+
+    if let Some(state) = auth_state {
+        app = app
+            .merge(crate::auth::auth_router(state.clone()))
+            .layer(axum::middleware::from_fn_with_state(
+                state,
+                crate::auth::middleware::auth_middleware,
+            ));
+    }
 
     let listener = tokio::net::TcpListener::bind(
         format!("{}:{}", config.http.bind_address, config.http.bind_port)
