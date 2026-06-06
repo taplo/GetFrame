@@ -22,7 +22,7 @@
 1. **混合并发模型**: OS 线程处理 FFmpeg 解码 + tokio async 处理网络 I/O
 2. **有界通道反压**: 流水线各阶段间使用 bounded channel 形成反压链
 3. **Claim-Check 模式**: 图片存 MinIO/S3，Kafka 只传元数据+S3 链接
-4. **核心绑定调度**: 每核 round-robin 调度 6-7 路流
+4. **核心绑定调度**: 每核 round-robin 调度 6-7 路流（TODO: 实测 200 流在 16 核上，核心绑定导致解码延迟从 104ms→183ms. 当 thread_count ≫ core_count 时，内核调度器自由调度优于静态绑定，待后续优化）
 5. **Guaranteed QoS**: `limits.cpu = requests.cpu` + CPU Manager static policy
 
 ## 开发与部署环境
@@ -147,6 +147,15 @@ ssh taplo@192.168.3.123 'cd /home/taplo/getframe/benchmark && WORKER_IMAGE=getfr
   - 消除 ~6MB/frame 的 RGB 临时缓冲区分配（1920×1080×3）
   - yuvutils-rs 依赖已从 Cargo.toml 中移除
 
+### Fix 10 — RTSP connect 30s 超时兜底（2026-06-04）
+- **文件**: `src/pipeline/ingest.rs:15-47`
+- **问题**: `avformat_open_input`（在 `format::input_with_dictionary` 中）在 RTSP 流未就绪时会阻塞 ~240s。FFmpeg RTSP demuxer 内部会多次重试 DESCRIBE/SETUP/PLAY 序列，而 `stimeout` 仅作用于已建立连接内的 socket 读取，不影响初始握手
+- **修复**: 
+  - 新增 `open_input_with_timeout()`，使用 `std::sync::mpsc::channel` + `recv_timeout(30s)` 将 `format::input_with_dictionary` 放入独立线程，超时后返回 `Err` 由重连任务重试
+  - 仅对 RTSP 源启用（file/HLS 不受影响）
+- **效果**: TTFF 从 ~240s 降至 ~15s（1 流），4+ 流降至 0s（即时）
+- **连带修复**: `benchmark/run.py:103` 添加 `-g 1` 强制每帧为关键帧，避免连接加速后无关键帧导致的无限等待
+
 ### Fix 9 — Cargo.lock UTF-16LE 编码修复（2026-06-03）
 - **文件**: `Cargo.lock`
 - **问题**: CI 报错 `failed to read file: Cargo.lock` / `stream did not contain valid UTF-8`。本地 Windows 编辑器将 Cargo.lock 保存为 UTF-16LE（`FF FE` BOM），Linux CI 上 Cargo 无法解析
@@ -164,33 +173,21 @@ ssh taplo@192.168.3.123 'cd /home/taplo/getframe/benchmark && WORKER_IMAGE=getfr
 
 **结论**：1fps 和 5fps 在所有流数下与基线持平。当前瓶颈不在 I/O（1fps 每流 92% 空闲，5fps 瓶颈在解码/编码），两阶段流水线主要为代码去重和未来准备。
 
-### 5fps 基准（2026-06-01，16核 .30，两阶段流水线 + 定时仪表化）
-| 流数 | actual_fps | CPU% | MEM(MB) | CPU/流 |
-|------|-----------|------|---------|--------|
-| 1 | 12.0 | 47.0% | 81 | 47.0% |
-| 2 | 12.2 | 48.3% | 90 | 24.1% |
-| 4 | 24.0 | 91.2% | 171 | 22.8% |
-| 8 | 48.4 | 150.2% | 319 | 18.8% |
-| 12 | 73.0 | 246.1% | 480 | 20.5% |
-| 16 | 91.4 | 345.4% | 597 | 21.6% |
-| 24 | 87.0 | 441.0% | 738 | 18.4% |
-| 32 | 83.2 | 476.9% | 716 | 14.9% |
 
-> 注意: 1-2 流 actual_fps > target (12 > 5) 因为 testsrc2 lavfi 源交付速度快于实时（非 realtime RTSP push）
 
-### 5fps 基准（2026-06-02，16核 .31，YUV Planes 直接编码）
-| 流数 | actual_fps | CPU% | MEM(MB) | CPU/流 |
-|------|-----------|------|---------|--------|
-| 1 | 5.9 | 11.8% | 47 | 11.8% |
-| 2 | 11.7 | 21.3% | 78 | 10.6% |
-| 4 | 23.5 | 46.6% | 144 | 11.6% |
-| 8 | 47.1 | 87.8% | 273 | 11.0% |
-| 12 | 70.6 | 150.1% | 406 | 12.5% |
-| 16 | 76.1 | 184.7% | 486 | 11.5% |
-| 24 | 83.1 | 262.3% | 547 | 10.9% |
-| 32 | — | — | — | — |
+### 5fps 基准（2026-06-04，16核 .31，v0.3.0 完整栈）
+| 流数 | actual_fps | CPU% | MEM(MB) | CPU/流 | 错误 |
+|------|-----------|------|---------|--------|------|
+| 1 | 6.6 | 10.8% | 153 | 10.8% | 0 |
+| 2 | 13.2 | 18.9% | 73 | 9.4% | 0 |
+| 4 | 26.2 | 37.4% | 131 | 9.4% | 0 |
+| 8 | 53.5 | 74.3% | 272 | 9.3% | 0 |
+| 12 | 78.6 | 116.5% | 399 | 9.7% | 0 |
+| 16 | 97.7 | 141.1% | 488 | 8.8% | 0 |
+| 24 | 97.7 | 158.7% | 575 | 6.6% | 0 |
+| 32 | 84.8 | 152.8% | 599 | 4.8% | 1 |
 
-> 32 流测试因基础设施限制未完成（mediamtx RTSP 源过载）。与旧版 5fps 基线（.30 8核）对比，YUV Planes 版本在 24 流时每帧 CPU 效率提升 ~60%（31.7 fps/core vs 19.7 fps/core），内存降低 ~26%（547MB vs 738MB）。注意机器不同（.30 8核 vs .31 16核），对比仅供参考。
+> **v0.3.0 5fps 基准完成**: 与 YUV Planes 基线（.31 16核）对比，16 流吞吐从 76.1→97.7 fps（+28%），CPU 从 185%→141%（-24%）。24 流吞吐从 83.1→97.7 fps（+18%），CPU 从 262%→159%（-39%）。32 流首次完成，吞吐峰值约 100fps（16-24 流），之后 I/O 瓶颈显现。32 流时出现少量错误（6 个/180 采样），需关注。
 
 ### 流水线阶段耗时分析（1 流 × 5fps，1080p，100 帧平均，固定仪表化）
 
@@ -268,32 +265,100 @@ ssh taplo@192.168.3.123 'cd /home/taplo/getframe/benchmark && WORKER_IMAGE=getfr
 
 > 与旧版持平 — 1fps 场景下每流 92% 空闲，上传/发布串行化非瓶颈
 
-### 1fps 基准（2026-06-04，16核 .31，v0.3.0 完整栈 — 含 MySQL/Kafka/MinIO/Prometheus/Grafana）
+### 1fps 基准（2026-06-04，16核 .123，v0.3.0 + Fix 10 + claim_batch_size=50）
 | 流数 | actual_fps | CPU% | MEM(MB) | CPU/流 | 错误 |
 |------|-----------|------|---------|--------|------|
-| 1 | 1.3 | 3.2% | 153 | 3.2% | 0 |
-| 2 | 2.7 | 6.6% | 73 | 3.3% | 0 |
-| 4 | 5.4 | 13.4% | 134 | 3.4% | 0 |
-| 8 | 10.5 | 19.8% | 254 | 2.5% | 0 |
-| 12 | 16.1 | 26.7% | 357 | 2.2% | 0 |
-| 16 | 20.2 | 34.6% | 456 | 2.2% | 0 |
-| 24 | 20.0 | 32.0% | 460 | 1.3% | 0 |
-| 32 | 19.6 | 31.3% | 505 | 1.0% | 0 |
+| 32 | 38.9 | 72.2% | 963 | 2.26% | 0 |
 
-> **v0.3.0 部署后首次基准**: 与 YUV Planes 基线（32 流 17.7fps/35.2%/510MB）相比，吞吐略高（19.6 vs 17.7 fps），CPU 更低（31.3% vs 35.2%），内存更低（505MB vs 510MB）。差异可能在测量误差范围内，但趋势正面。CPU/流从 3.2%（1 流）降至 1.0%（32 流），接近线性扩展。约 240s 的首帧等待时间仍在（FFmpeg RTSP 连接 30s timeout 链），需后续优化。
+### Phase 9: 1fps 大规模扩展基准（2026-06-04，16核 .123，relay mode，v0.3.1 + claim_batch_size=50）
+| 流数 | actual_fps | CPU% | MEM(MB) | CPU/流 | 错误 |
+|------|-----------|------|---------|--------|------|
+| 32 | 38.9 | 72.2% | 963 | 2.26% | 0 |
+| 48 | 58.3 | 176.5% | 1,487 | 3.68% | 0 |
+| 64 | 79.1 | 216.9% | 1,798 | 3.39% | 0 |
+| 96 | 119.0 | 333.7% | 2,542 | 3.47% | 0 |
+| 128 | 158.8 | 472.8% | 3,200 | 3.69% | 0 |
+| 200¹ | ~154 | 508% | 5,300 | 2.54% | 5-31 |
+
+> **¹200 流**: 前 3 采样帧率正常（152-244 fps），之后出现部分流重连错误（6 采样累计 5→31 错误），内存 5.3GB。128 流以内零错误稳定运行。200 流错误与 MediaMTX 单路径 200+ 订阅者连接限制有关，非 worker 架构瓶颈。
+>
+> **关键结论**: `claim_batch_size=50` 使 128 流在 15s 内完成抢占（原 5→7 周期 105s），首次帧等待均为即时（0s）。worker 架构支持 200+ 流处理，128 流以下零错误稳定。`docker compose down -v` 修复 MinIO 磁盘满问题（-v 清除匿名卷）。
+
+### 1fps 历史基准（2026-06-02，16核 .31，YUV Planes 直接编码，历史对比用）
+| 流数 | actual_fps | CPU% | MEM(MB) | CPU/流 | 错误 |
+|------|-----------|------|---------|--------|------|
+| 1 | 1.2 | 4.5% | 44 | 4.5% | 0 |
+| 2 | 2.4 | 8.8% | 74 | 4.4% | 0 |
+| 4 | 4.7 | 16.8% | 135 | 4.2% | 0 |
+| 8 | 9.3 | 27.4% | 248 | 3.4% | 0 |
+| 12 | 14.1 | 37.5% | 376 | 3.1% | 0 |
+| 16 | 17.6 | 32.8% | 463 | 2.0% | 0 |
+| 24 | 17.6 | 39.0% | 458 | 1.6% | 0 |
+| 32 | 17.7 | 35.2% | 510 | 1.1% | 0 |
+
+### E2E 集成测试套件（2026-06-06）
+- **文件**: `tests/e2e/test_full_flow.py`, `tests/e2e/test_auth.py`
+- **测试范围（full_flow）**: 14 步端到端测试覆盖完整流水线（含 auth login）：
+  1. Compose 堆栈就绪、Worker 健康端点、MinIO 可达、Worker auth login
+  2. Kafka topic 存在、启动 ffmpeg RTSP 源 → 通过 API 注册流 → 等待在线和帧解码
+  3. 验证帧累积（10s 内增长）、MinIO 中存在帧对象、Kafka 中有元数据消息
+  4. 验证 Worker 日志中的流水线定时仪表化
+  5. 删除流 → 验证从 API 列表中移除
+- **运行**: `cd /home/taplo/getframe && python3 tests/e2e/test_full_flow.py`
+- **依赖**: `.123` VM 上运行的 Docker compose（benchmark/compose.yaml），需要 `linuxserver/ffmpeg` 镜像用于 RTSP 源
+- **结果**: 14/14 通过（全绿）
+- **Auth 测试**: `tests/e2e/test_auth.py` — 10 场景覆盖 JWT 登录/API Key/角色 CRUD/公共端点
+- **Auth 运行**: `python3 -m pytest tests/e2e/test_auth.py -v`（需 pip install pytest）
+
+### Fix 11 — claim_batch_size 从 5→50 用于大规模抢占（2026-06-04）
+- **文件**: `src/config.rs:42`, `benchmark/config/config.yaml`, `config.docker.yaml`, `config.example.yaml`, `deploy/helm/getframe/values.yaml`
+- **问题**: 默认 `claim_batch_size=5` 导致 128 流需要 7 个心跳周期（~105s）才能完成抢占，200 流需要 40 周期（~600s）
+- **修复**: 默认值改为 50（128 流 1 周期 15s，200 流 4 周期 60s）
+- **连带修复**: 
+  - `benchmark/run.py` 增加 `--scale` 模式，使用单 ffmpeg 源 + MediaMTX 中继，支持 200+ 流基准测试
+  - `benchmark/compose.yaml` 增加 ulimit（nofile=65536）、sysctl（net.core.somaxconn=65535）和可选 worker-2
+  - `docker compose down -v`（自动清除匿名卷）解决跨迭代 MinIO 磁盘满问题
+
+### Fix 12 — 修复 Helm chart KEDA ScaledObject 模板并完善生产部署（2026-06-04）
+- **文件**: `deploy/helm/getframe/templates/keda-scaledobject.yaml`, `deploy/helm/getframe/templates/deployment.yaml`, `deploy/helm/getframe/templates/ingress.yaml`, `deploy/helm/getframe/values.yaml`, `deploy/helm/getframe/Chart.yaml`
+- **问题**: 
+  - `keda-scaledobject.yaml` 模板结构错误：`kind: ScaledObject` 在条件块外且缺少 `apiVersion`，HPA 分支也缺 `kind`
+  - Deployment 不支持环境变量覆盖（无法从 Secret 注入 DB URL 等）
+  - 缺少 Ingress 模板用于生产 K8s 暴露 API
+- **修复**: 
+  - 重写 `keda-scaledobject.yaml`：清晰的 KEDA ↔ HPA 二选一结构，两项均包含完整 apiVersion/kind/metadata/spec
+  - `deployment.yaml` 增加 `extraEnv`、`extraVolumes`、`extraVolumeMounts` 支持
+  - 新增 `ingress.yaml`（通过 `values.ingress.enabled` 控制）
+  - `values.yaml` 新增 `extraEnv/extraVolumes/extraVolumeMounts/ingress` 配置块
+  - Chart.yaml 版本同步至 v0.3.1
+- **效果**: Helm chart 现在可用于生产部署：`helm install getframe ./deploy/helm/getframe`
 
 ### 关键发现
 
 1. **JPEG 编码占 74% 的每帧成本**: 24ms/frame 1080p，解码 7.5ms（23%），YUV 拷贝 0.7ms（2%）
-2. **libjpeg-turbo 编码效率提升 ~3 倍**: JPEG 编码 CPU 开销降幅 ~65%（1fps 从 12%→4%，5fps 从 55%→19%）
-3. **5fps 每流 CPU 约 19-25%**（16 核 .31），16 流约 3.5 核（22% 总 CPU）
-4. **5fps 吞吐峰值 ~91 fps**（16 流），32 流时略降至 83 fps（I/O 争用）
+2. **单节点 128 流 1fps 零错误验证通过**: 16 核 .123 上 158.8 fps total，CPU 472.8%（4.7 核），CPU/流 3.69%，内存 3.2GB，错误 0。架构线性扩展至 128 流。
+3. **5fps 吞吐峰值 ~100 fps**（16-24 流），CPU 峰值 ~160%（16 核），之后 I/O 瓶颈限制
+4. **5fps v0.3.0 相比 YUV Planes 基线**: 16 流 +28% 吞吐（97.7 vs 76.1 fps），-24% CPU，32 流首次完成
 5. **瓶颈路径**: Decode (7.5ms) → **JPEG Encode (24ms)** → S3 Upload + Kafka Publish（异步）
-6. **1fps 32 流总 CPU 仅 72%**: 瓶颈固定为 S3/Kafka I/O，计算资源空闲
-7. **两阶段流水线**: 与基线持平，主要代码重构价值
-8. **定时仪表化工具**: 每 100 帧输出各阶段平均耗时（`Pipeline timing` 日志），可调 `STAGE_REPORT_INTERVAL`（`src/pipeline/decode.rs:12`）
-9. **仪表化修复纠正了误判**: 旧版 decode 4μs（只测 receive_frame）→ 新版 7.5ms（测 send_packet + receive_frame），优化优先级不变（JPEG 编码仍是首要瓶颈）
-10. **RTSP timeout 修复显著改善 TTFF**: stimeout 5s→30s，首帧等待从 300s+ 降至 5-245s（随流数递增递减）
+6. **内存效率**: 大规模 128 流约 3.2GB（25MB/流），200 流约 5.3GB（26.5MB/流），包含 FFmpeg decoder、libjpeg-turbo encoder、S3 缓冲区
+7. **200 流 MediaMTX 瓶颈**: 单 RTSP 路径的 200+ 并发订阅者限制导致部分流重连，非 worker 架构瓶颈
+8. **claim_batch_size=50 关键**: 128 流 15s 内完成抢占（vs 原 105s），200 流 60s 内完成
+9. **定时仪表化工具**: 每 100 帧输出各阶段平均耗时（`Pipeline timing` 日志），可调 `STAGE_REPORT_INTERVAL`
+10. **RTSP 首帧延迟已修复（Fix 10）**: `avformat_open_input` 使用 `std::sync::mpsc::recv_timeout(30s)` 兜底，TTFF 从 ~240s 降至 ~15s（1 流），4+ 流即时
+11. **核心绑定退化为负优化（2026-06-05 实测）**: 200 流在 16 核上，`GETFRAME_CPU_CORES=0-15` 使得解码延迟从 104ms→183ms（+76%），CPU 从 600%→975%（+62%）。200 线程数远大于 16 核时，内核调度器的自由调度弹性优于静态核心绑定——线程可以在任意可用核心上运行，避免单核过载。建议当 thread_count ≫ core_count 时不使用核心绑定
+
+### Fix 13 — API 认证（API-06, 2026-06-06）
+- **文件**: `src/auth/` (6 files), `src/main.rs`, `src/config.rs`, `Cargo.toml`, `migrations/20260605_000001_api_auth.sql`, `config.*.yaml`, `tests/e2e/test_auth.py`, `tests/e2e/test_full_flow.py`
+- **实现**: 
+  - JWT Bearer + API Key (gfk_ prefix, SHA-256 hash) 双认证
+  - 用户存储在 MySQL: username + argon2 password_hash + role (admin/viewer)
+  - `X-API-Key` 头认证（查 api_keys 表）+ `Authorization: Bearer` JWT 认证
+  - 7 个 auth handler: 登录、用户 CRUD、API Key CRUD
+  - 公共路由白名单：/health, /ready, /metrics, /swagger-ui, /api/v1/auth/login
+  - AuthState 中持有 DB pool + JWT secret
+  - 初始 admin 用户从 `auth.initial_admin_password` 配置引导
+- **Bug 修复**: MySQL TIMESTAMP → DATETIME（sqlx 的 NaiveDateTime 不兼容 TIMESTAMP）
+- **测试结果**: Auth 测试 10/10 通过，Full Flow 回归 14/14 通过（含 auth login 步骤）
 
 ## 基准测试命令
 
@@ -315,6 +380,12 @@ screen -S bench -X hardcopy /tmp/screen.log && tail -20 /tmp/screen.log
 # 查看结果
 cat /home/taplo/getframe/benchmark/results/benchmark-1fps.csv
 cat /home/taplo/getframe/benchmark/results/benchmark-5fps.csv
+
+# 运行大规模扩展基准测试（32-200 流，relay mode）
+screen -dmS bench-scale python3 run.py --scale
+
+# 查看结果
+cat /home/taplo/getframe/benchmark/results/benchmark-1fps-scale.csv
 
 # 查看 timing 仪表化数据
 docker logs getframe-bench-worker 2>&1 | grep 'Pipeline timing'
