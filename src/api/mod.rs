@@ -2,6 +2,7 @@ mod streams;
 mod rules;
 mod tasks;
 mod metrics;
+mod activity;
 
 use std::sync::Arc;
 use axum::Router;
@@ -44,6 +45,8 @@ use crate::task::TaskManager;
         crate::api::tasks::stop_task,
         crate::api::tasks::get_task_events,
         crate::api::metrics::history_handler,
+        crate::api::activity::list_handler,
+        crate::api::activity::export_handler,
     ),
     components(schemas(
         crate::health::HealthResponse,
@@ -73,6 +76,7 @@ use crate::task::TaskManager;
         crate::api::metrics::HistoryQuery,
         crate::api::tasks::TaskEventsResponse,
         crate::api::tasks::TaskEventItem,
+        crate::api::activity::ActivityListResponse,
     ))
 )]
 pub struct ApiDoc;
@@ -84,7 +88,9 @@ pub fn api_router(manager: StreamManager, task_manager: Arc<TaskManager>, db_poo
         .nest("/api/v1/tasks", tasks::task_routes(task_manager));
 
     if let Some(pool) = db_pool {
-        router = router.nest("/api/v1/metrics", metrics::metrics_routes(Arc::new(pool)));
+        router = router
+            .nest("/api/v1/metrics", metrics::metrics_routes(Arc::new(pool.clone())))
+            .nest("/api/v1/activity", activity::activity_routes(Some(pool)));
     }
 
     router
