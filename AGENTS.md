@@ -309,6 +309,7 @@ ssh taplo@192.168.3.123 'cd /home/taplo/getframe/benchmark && WORKER_IMAGE=getfr
 - **结果**: 14/14 通过（全绿）
 - **Auth 测试**: `tests/e2e/test_auth.py` — 10 场景覆盖 JWT 登录/API Key/角色 CRUD/公共端点
 - **Auth 运行**: `python3 -m pytest tests/e2e/test_auth.py -v`（需 pip install pytest）
+- **Handler 角色检查**: viewer 只读 (GET/LIST)，admin 读写 (POST/PUT/DELETE) — stream/rule/task 全部 handler 覆盖
 
 ### Fix 11 — claim_batch_size 从 5→50 用于大规模抢占（2026-06-04）
 - **文件**: `src/config.rs:42`, `benchmark/config/config.yaml`, `config.docker.yaml`, `config.example.yaml`, `deploy/helm/getframe/values.yaml`
