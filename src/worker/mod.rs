@@ -147,6 +147,16 @@ impl WorkerManager {
                 tracing::info!(worker_id = %self.worker_id, stream_id = %id, "Claimed new stream");
             }
             crate::metrics::CLAIMED_STREAMS.increment(1.0);
+            let _ = crate::db::activity_log::insert(&self.db_pool, &crate::db::activity_log::ActivityLogRow {
+                id: 0,
+                event_type: "worker.claimed".into(),
+                resource_type: "system".into(),
+                resource_id: None,
+                actor: format!("worker:{}", self.worker_id),
+                description: format!("Worker 认领流 {}", id),
+                details: None,
+                recorded_at: chrono::Utc::now(),
+            }).await;
         }
     }
 
@@ -197,6 +207,16 @@ impl WorkerManager {
             .await;
 
         tracing::info!(worker_id = %self.worker_id, "All claims released");
+        let _ = crate::db::activity_log::insert(&self.db_pool, &crate::db::activity_log::ActivityLogRow {
+            id: 0,
+            event_type: "worker.released".into(),
+            resource_type: "system".into(),
+            resource_id: None,
+            actor: format!("worker:{}", self.worker_id),
+            description: format!("Worker 释放所有认领"),
+            details: None,
+            recorded_at: chrono::Utc::now(),
+        }).await;
     }
 }
 
