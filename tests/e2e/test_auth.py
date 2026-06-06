@@ -1,7 +1,7 @@
 """E2E tests for API authentication (JWT + API Key).
 
 Prerequisites: worker stack running on .123 (docker compose up).
-Run: cd D:\projects\GetFrame && pytest tests\e2e\test_auth.py -v
+    Run: cd /path/to/getframe && python3 -m pytest tests/e2e/test_auth.py -v
 """
 import pytest
 import requests

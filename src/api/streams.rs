@@ -6,6 +6,7 @@ use axum::{
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use crate::auth::AuthUser;
 use crate::config::StreamConfig;
 use crate::stream::health::StreamStatus;
 use crate::stream::StreamManager;
@@ -111,8 +112,13 @@ pub async fn list_streams(
         let required: Vec<&str> = tags.split(',').map(|t| t.trim()).filter(|t| !t.is_empty()).collect();
         if !required.is_empty() {
             responses.retain(|s| {
-                let keys: Vec<&str> = s.tags.keys().map(|k| k.as_str()).collect();
-                required.iter().all(|r| keys.contains(r))
+                required.iter().all(|r| {
+                    if let Some((key, val)) = r.split_once('=') {
+                        s.tags.get(key.trim()).map(|v| v == val.trim()).unwrap_or(false)
+                    } else {
+                        s.tags.contains_key(*r)
+                    }
+                })
             });
         }
     }
@@ -131,8 +137,10 @@ pub async fn list_streams(
 )]
 pub async fn create_stream(
     State(manager): State<StreamManager>,
+    auth_user: AuthUser,
     Json(req): Json<CreateStreamRequest>,
 ) -> Result<(StatusCode, Json<StreamResponse>), (StatusCode, Json<serde_json::Value>)> {
+    require_admin(&auth_user)?;
     let mut config = req.config;
 
     if config.source_type.is_empty() {
@@ -203,9 +211,11 @@ pub async fn get_stream(
 )]
 pub async fn update_stream(
     State(manager): State<StreamManager>,
+    auth_user: AuthUser,
     Path(id): Path<StreamId>,
     Json(req): Json<UpdateStreamRequest>,
 ) -> Result<Json<StreamResponse>, (StatusCode, Json<serde_json::Value>)> {
+    require_admin(&auth_user)?;
     let registry = manager.registry();
     if !registry.exists(&id) {
         return Err(not_found(id));
@@ -253,12 +263,14 @@ pub async fn update_stream(
 )]
 pub async fn delete_stream(
     State(manager): State<StreamManager>,
+    auth_user: AuthUser,
     Path(id): Path<StreamId>,
-) -> StatusCode {
+) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    require_admin(&auth_user)?;
     if manager.remove_stream(&id) {
-        StatusCode::NO_CONTENT
+        Ok(StatusCode::NO_CONTENT)
     } else {
-        StatusCode::NOT_FOUND
+        Ok(StatusCode::NOT_FOUND)
     }
 }
 
@@ -440,6 +452,14 @@ pub async fn test_url(
             error: Some(e.clone()),
             message: e,
         }),
+    }
+}
+
+fn require_admin(auth_user: &AuthUser) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    if auth_user.role != "admin" {
+        Err((StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "admin role required"}))))
+    } else {
+        Ok(())
     }
 }
 

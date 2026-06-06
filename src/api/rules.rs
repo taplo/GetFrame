@@ -5,6 +5,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use crate::auth::AuthUser;
 use crate::pipeline::rule::RuleConfig;
 use crate::stream::StreamManager;
 use crate::types::StreamId;
@@ -87,9 +88,11 @@ fn is_duplicate_rule(existing: &RuleConfig, new_rule: &RuleConfig) -> bool {
 )]
 pub async fn create_rule(
     State(manager): State<StreamManager>,
+    auth_user: AuthUser,
     Path(stream_id): Path<StreamId>,
     Json(req): Json<CreateRuleRequest>,
 ) -> Result<(StatusCode, Json<RuleOperationResponse>), (StatusCode, Json<serde_json::Value>)> {
+    require_admin(&auth_user)?;
     let registry = manager.registry();
     if !registry.exists(&stream_id) {
         return Err(not_found(stream_id));
@@ -157,9 +160,11 @@ pub async fn get_rule(
 )]
 pub async fn update_rule(
     State(manager): State<StreamManager>,
+    auth_user: AuthUser,
     Path((stream_id, index)): Path<(StreamId, usize)>,
     Json(req): Json<UpdateRuleRequest>,
 ) -> Result<Json<RuleOperationResponse>, (StatusCode, Json<serde_json::Value>)> {
+    require_admin(&auth_user)?;
     let registry = manager.registry();
     if !registry.exists(&stream_id) {
         return Err(not_found(stream_id));
@@ -188,8 +193,10 @@ pub async fn update_rule(
 )]
 pub async fn delete_rule(
     State(manager): State<StreamManager>,
+    auth_user: AuthUser,
     Path((stream_id, index)): Path<(StreamId, usize)>,
 ) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    require_admin(&auth_user)?;
     let registry = manager.registry();
     if !registry.exists(&stream_id) {
         return Err(not_found(stream_id));
@@ -201,6 +208,14 @@ pub async fn delete_rule(
     rules.remove(index);
     registry.update_rules(&stream_id, rules);
     Ok(StatusCode::NO_CONTENT)
+}
+
+fn require_admin(auth_user: &AuthUser) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    if auth_user.role != "admin" {
+        Err((StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "admin role required"}))))
+    } else {
+        Ok(())
+    }
 }
 
 fn not_found(stream_id: StreamId) -> (StatusCode, Json<serde_json::Value>) {

@@ -6,6 +6,7 @@ use axum::{
 };
 use serde::Serialize;
 use utoipa::ToSchema;
+use crate::auth::AuthUser;
 use crate::task::registry::{TaskId, TaskInfo, CreateTaskRequest};
 use crate::task::{TaskManager, TaskError};
 
@@ -52,10 +53,12 @@ pub async fn list_tasks(
 )]
 pub async fn create_task(
     State(manager): State<Arc<TaskManager>>,
+    auth_user: AuthUser,
     Json(req): Json<CreateTaskRequest>,
-) -> (StatusCode, Json<TaskInfo>) {
+) -> Result<(StatusCode, Json<TaskInfo>), (StatusCode, Json<serde_json::Value>)> {
+    require_admin(&auth_user)?;
     let task = manager.create_task(req);
-    (StatusCode::CREATED, Json(task))
+    Ok((StatusCode::CREATED, Json(task)))
 }
 
 #[utoipa::path(
@@ -94,12 +97,14 @@ pub async fn get_task(
 )]
 pub async fn delete_task(
     State(manager): State<Arc<TaskManager>>,
+    auth_user: AuthUser,
     Path(id): Path<TaskId>,
-) -> StatusCode {
+) -> Result<StatusCode, (StatusCode, Json<serde_json::Value>)> {
+    require_admin(&auth_user)?;
     if manager.delete_task(id) {
-        StatusCode::NO_CONTENT
+        Ok(StatusCode::NO_CONTENT)
     } else {
-        StatusCode::NOT_FOUND
+        Ok(StatusCode::NOT_FOUND)
     }
 }
 
@@ -118,8 +123,10 @@ pub async fn delete_task(
 )]
 pub async fn start_task(
     State(manager): State<Arc<TaskManager>>,
+    auth_user: AuthUser,
     Path(id): Path<TaskId>,
 ) -> Result<Json<TaskInfo>, (StatusCode, Json<serde_json::Value>)> {
+    require_admin(&auth_user)?;
     manager.start_task(id)
         .map(Json)
         .map_err(map_task_error)
@@ -140,8 +147,10 @@ pub async fn start_task(
 )]
 pub async fn pause_task(
     State(manager): State<Arc<TaskManager>>,
+    auth_user: AuthUser,
     Path(id): Path<TaskId>,
 ) -> Result<Json<TaskInfo>, (StatusCode, Json<serde_json::Value>)> {
+    require_admin(&auth_user)?;
     manager.pause_task(id)
         .map(Json)
         .map_err(map_task_error)
@@ -162,8 +171,10 @@ pub async fn pause_task(
 )]
 pub async fn resume_task(
     State(manager): State<Arc<TaskManager>>,
+    auth_user: AuthUser,
     Path(id): Path<TaskId>,
 ) -> Result<Json<TaskInfo>, (StatusCode, Json<serde_json::Value>)> {
+    require_admin(&auth_user)?;
     manager.resume_task(id)
         .map(Json)
         .map_err(map_task_error)
@@ -184,8 +195,10 @@ pub async fn resume_task(
 )]
 pub async fn stop_task(
     State(manager): State<Arc<TaskManager>>,
+    auth_user: AuthUser,
     Path(id): Path<TaskId>,
 ) -> Result<Json<TaskInfo>, (StatusCode, Json<serde_json::Value>)> {
+    require_admin(&auth_user)?;
     manager.stop_task(id)
         .map(Json)
         .map_err(map_task_error)
@@ -234,6 +247,14 @@ pub async fn get_task_events(
     }).collect();
 
     Ok(Json(TaskEventsResponse { events }))
+}
+
+fn require_admin(auth_user: &AuthUser) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    if auth_user.role != "admin" {
+        Err((StatusCode::FORBIDDEN, Json(serde_json::json!({"error": "admin role required"}))))
+    } else {
+        Ok(())
+    }
 }
 
 fn not_found(id: TaskId) -> (StatusCode, Json<serde_json::Value>) {
