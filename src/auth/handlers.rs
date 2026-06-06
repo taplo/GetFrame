@@ -43,6 +43,17 @@ pub async fn login_handler(
             (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()})))
         })?;
 
+    let _ = crate::db::activity_log::insert(&state.pool, &crate::db::activity_log::ActivityLogRow {
+        id: 0,
+        event_type: "auth.login".into(),
+        resource_type: "user".into(),
+        resource_id: Some(user.id.clone()),
+        actor: body.username.clone(),
+        description: format!("用户 {} 登录", body.username),
+        details: None,
+        recorded_at: chrono::Utc::now(),
+    }).await;
+
     Ok(Json(LoginResponse {
         token,
         token_type: "Bearer".to_string(),
@@ -127,6 +138,17 @@ pub async fn create_user_handler(
             (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()})))
         })?;
 
+    let _ = crate::db::activity_log::insert(&state.pool, &crate::db::activity_log::ActivityLogRow {
+        id: 0,
+        event_type: "auth.user_created".into(),
+        resource_type: "user".into(),
+        resource_id: Some(id.clone()),
+        actor: auth_user.username.clone(),
+        description: format!("创建用户 \"{}\" (角色: {})", body.username, role),
+        details: None,
+        recorded_at: chrono::Utc::now(),
+    }).await;
+
     Ok((StatusCode::CREATED, Json(CreateUserResponse {
         id,
         username: body.username,
@@ -154,6 +176,16 @@ pub async fn delete_user_handler(
         })?;
 
     if deleted {
+        let _ = crate::db::activity_log::insert(&state.pool, &crate::db::activity_log::ActivityLogRow {
+            id: 0,
+            event_type: "auth.user_deleted".into(),
+            resource_type: "user".into(),
+            resource_id: Some(id.clone()),
+            actor: auth_user.username.clone(),
+            description: format!("删除用户 (ID: {})", id),
+            details: None,
+            recorded_at: chrono::Utc::now(),
+        }).await;
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "user not found"}))))
@@ -241,6 +273,17 @@ pub async fn create_api_key_handler(
             (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()})))
         })?;
 
+    let _ = crate::db::activity_log::insert(&state.pool, &crate::db::activity_log::ActivityLogRow {
+        id: 0,
+        event_type: "auth.api_key_created".into(),
+        resource_type: "api_key".into(),
+        resource_id: Some(id.clone()),
+        actor: auth_user.username.clone(),
+        description: format!("创建 API Key \"{}\"", name),
+        details: None,
+        recorded_at: chrono::Utc::now(),
+    }).await;
+
     Ok((StatusCode::CREATED, Json(CreateApiKeyResponse {
         id,
         key: raw_key,
@@ -275,6 +318,16 @@ pub async fn delete_api_key_handler(
                 })?;
 
             if deleted {
+                let _ = crate::db::activity_log::insert(&state.pool, &crate::db::activity_log::ActivityLogRow {
+                    id: 0,
+                    event_type: "auth.api_key_deleted".into(),
+                    resource_type: "api_key".into(),
+                    resource_id: Some(id.clone()),
+                    actor: auth_user.username.clone(),
+                    description: format!("删除 API Key (ID: {})", id),
+                    details: None,
+                    recorded_at: chrono::Utc::now(),
+                }).await;
                 Ok(StatusCode::NO_CONTENT)
             } else {
                 Err((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "API key not found"}))))
