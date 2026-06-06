@@ -16,13 +16,18 @@ kafka:
 
 database:
   url: "mysql://getframe:getframe@mysql:3306/getframe"
-  max_connections: 10
+  max_connections: 20
+
+auth:
+  jwt_secret: ""
+  jwt_expiry_seconds: 86400
+  initial_admin_password: "changeme123"
 
 worker:
   id: ""
   heartbeat_interval_secs: 15
-  claim_batch_size: 5
-  claim_timeout_secs: 30
+  claim_batch_size: 50
+  claim_timeout_secs: 60
 
 http:
   bind_address: "0.0.0.0"

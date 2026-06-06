@@ -33,13 +33,23 @@ kafka:
 
 database:
   url: "mysql://getframe:getframe@localhost:3306/getframe"
-  max_connections: 10
+  max_connections: 20
+
+auth:
+  # JWT secret key. If empty, a random one is generated at startup (logs a warning).
+  # In production, set this via config file or environment variable.
+  jwt_secret: ""
+  # JWT token expiry in seconds (default: 86400 = 24 hours)
+  jwt_expiry_seconds: 86400
+  # Initial admin password for first-run bootstrap.
+  # The "admin" user is created if it doesn't exist on startup.
+  initial_admin_password: "changeme123"
 
 worker:
   id: ""                           # 默认取 K8s pod hostname
   heartbeat_interval_secs: 15      # 心跳间隔（秒）
-  claim_batch_size: 5              # 每次抢占 stream 数量
-  claim_timeout_secs: 30           # claim 过期时间（秒）
+  claim_batch_size: 50             # 每次抢占 stream 数量（200+ streams 需要 50+）
+  claim_timeout_secs: 60           # claim 过期时间（秒）
 
 http:
   bind_address: "0.0.0.0"
