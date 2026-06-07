@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { streamsApi } from "@/api/streams"
 import type { StreamInfo } from "@/types/stream"
 
@@ -9,6 +10,7 @@ interface StreamTableProps {
 }
 
 export function StreamTable({ streams, onEdit, onRefresh }: StreamTableProps) {
+  const navigate = useNavigate()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState("")
 
@@ -67,7 +69,9 @@ export function StreamTable({ streams, onEdit, onRefresh }: StreamTableProps) {
             <tr key={s.id} className="border-b hover:bg-gray-50">
               <td className="p-3"><input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} /></td>
               <td className="p-3"><span className={s.status === "online" ? "text-success" : s.status.startsWith("error") ? "text-error" : "text-gray-500"}>● {s.status === "online" ? "在线" : s.status.startsWith("error") ? "异常" : "离线"}</span></td>
-              <td className="p-3 font-medium">{s.name}</td>
+              <td className="p-3">
+                <button onClick={() => navigate(`/streams/${s.id}`)} className="text-brand hover:underline font-medium">{s.name}</button>
+              </td>
               <td className="p-3 text-gray-500 truncate max-w-48">{s.source_url}</td>
               <td className="p-3">{s.source_type}</td>
               <td className="p-3">{Object.entries(s.tags || {}).map(([k, v]) => (

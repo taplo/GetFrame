@@ -6,6 +6,7 @@ import { TasksPage } from "@/pages/Tasks"
 import { TaskDetail } from "@/pages/TaskDetail"
 import ActivityLog from "@/pages/ActivityLog"
 import RulesPage from "@/pages/RulesPage"
+import StreamDetail from "@/pages/StreamDetail"
 
 export function App() {
   return (
@@ -14,6 +15,7 @@ export function App() {
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="streams" element={<StreamsPage />} />
+          <Route path="streams/:id" element={<StreamDetail />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="tasks/:id" element={<TaskDetail />} />
           <Route path="activity" element={<ActivityLog />} />
