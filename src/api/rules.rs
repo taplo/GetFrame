@@ -270,10 +270,9 @@ pub async fn list_all_rules(
                 if type_name != filter_type.as_str() { continue; }
             }
             if let Some(ref sid_str) = params.stream_id {
-                if let Ok(sid) = uuid::Uuid::parse_str(sid_str) {
-                    if info.id != sid {
-                        continue;
-                    }
+                match uuid::Uuid::parse_str(sid_str) {
+                    Ok(sid) => { if info.id != sid { continue; } }
+                    Err(_) => continue,
                 }
             }
             items.push(GlobalRuleItem {
