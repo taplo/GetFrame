@@ -10,6 +10,7 @@ RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.li
       /usr/share/locale /usr/share/info /var/cache/apt/archives/*.deb
 
 COPY getframe-worker-new /getframe-worker
+COPY migrations/ migrations/
 COPY web/dist /web/dist
 COPY config.example.yaml /etc/getframe/config.yaml
 EXPOSE 8080

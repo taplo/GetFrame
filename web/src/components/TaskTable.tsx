@@ -90,7 +90,7 @@ export function TaskTable({ tasks, onRefresh }: TaskTableProps) {
             <tr key={t.id} className="border-b hover:bg-gray-50">
               <td className="p-3"><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggle(t.id)} /></td>
               <td className="p-3"><span className={`px-1.5 py-0.5 rounded text-xs font-medium ${statusStyle[t.status]}`}>{statusLabel[t.status]}</span></td>
-              <td className="p-3 font-medium">{t.name}</td>
+              <td className="p-3 font-medium"><Link to={`/tasks/${t.id}`} className="text-brand hover:underline">{t.name}</Link></td>
               <td className="p-3 text-gray-600">{t.stream_name}</td>
               <td className="p-3 text-gray-500">{t.rules?.[0]?.type || "-"}</td>
               <td className="p-3">{t.frames_extracted?.toLocaleString() || "0"}</td>
