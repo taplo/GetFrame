@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json, Router,
 };
@@ -208,6 +208,84 @@ pub async fn delete_rule(
     rules.remove(index);
     registry.update_rules(&stream_id, rules);
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct GlobalRuleItem {
+    #[schema(value_type = String)]
+    pub stream_id: StreamId,
+    pub stream_name: String,
+    pub source_url: String,
+    pub index: usize,
+    pub rule: RuleConfig,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct GlobalRulesResponse {
+    pub rules: Vec<GlobalRuleItem>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GlobalRulesQuery {
+    pub stream_id: Option<String>,
+    pub r#type: Option<String>,
+}
+
+pub fn global_rules_routes(manager: StreamManager) -> Router {
+    Router::new()
+        .route("/", axum::routing::get(list_all_rules))
+        .with_state(manager)
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/rules",
+    tag = "rules",
+    params(
+        ("stream_id" = Option<String>, Query, description = "Filter by stream ID"),
+        ("type" = Option<String>, Query, description = "Filter by rule type"),
+    ),
+    responses(
+        (status = 200, description = "List of all rules across streams", body = GlobalRulesResponse),
+    )
+)]
+pub async fn list_all_rules(
+    State(manager): State<StreamManager>,
+    Query(params): Query<GlobalRulesQuery>,
+) -> Json<GlobalRulesResponse> {
+    let registry = manager.registry();
+    let streams = registry.list();
+    let mut items = Vec::new();
+    for info in &streams {
+        let rules = info.rules.read().unwrap();
+        for (i, rule) in rules.iter().enumerate() {
+            if let Some(ref filter_type) = params.r#type {
+                let type_name = match rule {
+                    RuleConfig::Interval { .. } => "interval",
+                    RuleConfig::Fps { .. } => "fps",
+                    RuleConfig::SceneChange { .. } => "scene_change",
+                    RuleConfig::RateLimited { .. } => "rate_limited",
+                    RuleConfig::Composite { .. } => "composite",
+                };
+                if type_name != filter_type.as_str() { continue; }
+            }
+            if let Some(ref sid_str) = params.stream_id {
+                if let Ok(sid) = uuid::Uuid::parse_str(sid_str) {
+                    if info.id != sid {
+                        continue;
+                    }
+                }
+            }
+            items.push(GlobalRuleItem {
+                stream_id: info.id,
+                stream_name: info.config.name.clone(),
+                source_url: info.config.source_url.clone(),
+                index: i,
+                rule: rule.clone(),
+            });
+        }
+    }
+    Json(GlobalRulesResponse { rules: items })
 }
 
 fn require_admin(auth_user: &AuthUser) -> Result<(), (StatusCode, Json<serde_json::Value>)> {

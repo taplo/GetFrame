@@ -35,6 +35,7 @@ use crate::task::TaskManager;
         crate::api::rules::get_rule,
         crate::api::rules::update_rule,
         crate::api::rules::delete_rule,
+        crate::api::rules::list_all_rules,
         crate::api::tasks::list_tasks,
         crate::api::tasks::create_task,
         crate::api::tasks::get_task,
@@ -62,6 +63,8 @@ use crate::task::TaskManager;
         crate::api::rules::CreateRuleRequest,
         crate::api::rules::UpdateRuleRequest,
         crate::api::rules::RuleOperationResponse,
+        crate::api::rules::GlobalRuleItem,
+        crate::api::rules::GlobalRulesResponse,
         crate::api::tasks::TaskListResponse,
         crate::task::registry::TaskInfo,
         crate::task::registry::TaskStatus,
@@ -84,7 +87,8 @@ pub struct ApiDoc;
 pub fn api_router(manager: StreamManager, task_manager: Arc<TaskManager>, db_pool: Option<MySqlPool>) -> Router {
     let mut router = Router::new()
         .nest("/api/v1/streams", streams::stream_routes(manager.clone()))
-        .nest("/api/v1/streams/{id}/rules", rules::rules_routes(manager))
+        .nest("/api/v1/streams/{id}/rules", rules::rules_routes(manager.clone()))
+        .nest("/api/v1/rules", rules::global_rules_routes(manager.clone()))
         .nest("/api/v1/tasks", tasks::task_routes(task_manager));
 
     if let Some(pool) = db_pool {
