@@ -195,6 +195,7 @@ impl StreamManager {
         config: StreamConfig,
     ) -> StreamId {
         let id = StreamId::new_v4();
+        let stream_name = config.name.clone();
         self.registry.add(id, config.clone());
 
         let shutdown_token = CancellationToken::new();
@@ -239,7 +240,6 @@ impl StreamManager {
         crate::metrics::STREAMS_ACTIVE.increment(1.0);
         crate::metrics::STREAMS_TOTAL.increment(1);
 
-        let stream_name = config.name.clone();
         let sid = id;
         {
             let cfg = self.registry.get(&sid).map(|i| i.config.clone());
@@ -518,6 +518,7 @@ impl StreamManager {
     }
 
     pub fn update_stream_config(&self, id: &StreamId, config: crate::config::StreamConfig) {
+        let stream_name = config.name.clone();
         self.registry.update_config(id, config.clone());
         let pool = self.db_pool.clone();
         let sid = *id;
@@ -527,7 +528,6 @@ impl StreamManager {
             }
         });
 
-        let stream_name = config.name.clone();
         self.record_activity(
             "stream.updated",
             Some(&id.to_string()),

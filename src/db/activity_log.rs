@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, MySqlPool, QueryBuilder};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct ActivityLogRow {
     pub id: i64,
     pub event_type: String,
@@ -50,7 +51,7 @@ pub async fn insert(pool: &MySqlPool, row: &ActivityLogRow) -> Result<(), sqlx::
     .bind(&row.resource_id)
     .bind(&row.actor)
     .bind(&row.description)
-    .bind(&row.details as Option<serde_json::Value>)
+    .bind(&row.details)
     .bind(row.recorded_at)
     .execute(pool)
     .await?;

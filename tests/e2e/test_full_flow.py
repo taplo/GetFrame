@@ -190,6 +190,30 @@ def kafka_has_messages():
     )
     return len(r) > 20
 
+@step("Activity log has stream events")
+def activity_log_has_events():
+    """Verify that activity log records stream.created and auth.login"""
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        try:
+            req = urllib.request.Request(f"{WORKER_API}/api/v1/activity?resource_type=stream&page_size=5", headers=auth_headers())
+            data = json.loads(urllib.request.urlopen(req, timeout=5).read())
+            if data.get("total", 0) >= 1:
+                created = [e for e in data["items"] if e["event_type"] == "stream.created"]
+                if len(created) >= 1:
+                    return True
+        except Exception:
+            pass
+        time.sleep(3)
+    return False
+
+@step("Activity log CSV export works")
+def activity_log_csv_export():
+    req = urllib.request.Request(f"{WORKER_API}/api/v1/activity/export", headers=auth_headers())
+    resp = urllib.request.urlopen(req, timeout=5)
+    body = resp.read().decode()
+    return body.startswith("id,event_type,")
+
 @step("Worker logs show pipeline timing")
 def pipeline_timing_logged():
     logs = sh("docker logs getframe-bench-worker 2>&1 | grep -c 'Pipeline timing'", check=False)

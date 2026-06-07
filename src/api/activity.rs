@@ -1,6 +1,7 @@
 use axum::{
     extract::{Query, State},
     http::StatusCode,
+    response::IntoResponse,
     Json, Router,
 };
 use serde::Serialize;
@@ -16,14 +17,14 @@ pub struct ActivityListResponse {
 }
 
 pub fn activity_routes(pool: Option<sqlx::MySqlPool>) -> Router {
-    let mut router = Router::new();
     if let Some(p) = pool {
-        router = router
+        Router::new()
             .route("/", axum::routing::get(list_handler))
             .route("/export", axum::routing::get(export_handler))
-            .with_state(p);
+            .with_state(p)
+    } else {
+        Router::new()
     }
-    router
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -94,7 +95,7 @@ pub async fn list_handler(
 pub async fn export_handler(
     State(pool): State<sqlx::MySqlPool>,
     Query(params): Query<ActivityQueryParams>,
-) -> Result<(StatusCode, [(&'static str, &'static str); 2], String), (StatusCode, Json<serde_json::Value>)> {
+) -> Result<axum::response::Response, (StatusCode, Json<serde_json::Value>)> {
     let query = build_query(params);
     match activity_log::query_export(&pool, &query, 100000).await {
         Ok(rows) => {
@@ -113,9 +114,10 @@ pub async fn export_handler(
                 ));
             }
             Ok((
-                (StatusCode::OK, [("content-type", "text/csv; charset=utf-8"), ("content-disposition", "attachment; filename=\"activity-log.csv\"")]),
+                StatusCode::OK,
+                [("content-type", "text/csv; charset=utf-8"), ("content-disposition", "attachment; filename=\"activity-log.csv\"")],
                 csv,
-            ))
+            ).into_response())
         }
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
