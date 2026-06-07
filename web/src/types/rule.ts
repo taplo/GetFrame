@@ -10,3 +10,11 @@ export interface RuleConfig {
   operator?: CompositeOperator
   rules?: RuleConfig[]
 }
+
+export interface GlobalRuleItem {
+  stream_id: string
+  stream_name: string
+  source_url: string
+  index: number
+  rule: RuleConfig
+}

@@ -6,6 +6,7 @@ const navItems = [
   { to: "/streams", label: "流管理" },
   { to: "/tasks", label: "任务管理" },
   { to: "/activity", label: "活动日志" },
+  { to: "/rules", label: "规则管理" },
 ]
 
 export function Layout() {
