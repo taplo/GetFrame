@@ -15,6 +15,7 @@ pub struct UserRow {
 pub struct ApiKeyRow {
     pub id: String,
     pub user_id: String,
+    #[allow(dead_code)]
     pub key_hash: String,
     pub key_prefix: String,
     pub name: String,

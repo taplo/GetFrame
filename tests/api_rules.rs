@@ -132,7 +132,7 @@ async fn test_api_rules_global_filter_stream() {
     let app = common::api::test_app(pool);
 
     let stream1 = create_stream(&app, "stream-1").await;
-    let stream2 = create_stream(&app, "stream-2").await;
+    let _stream2 = create_stream(&app, "stream-2").await;
 
     // stream1: 1 default + 1 added = 2. stream2: 1 default.
     let rule = serde_json::json!({"rule": {"type": "fps", "fps": 15}});
@@ -142,7 +142,7 @@ async fn test_api_rules_global_filter_stream() {
     )).await.unwrap();
 
     let response = app
-        .oneshot(Request::get(&format!("/api/v1/rules?stream_id={}", stream1)).body(Body::empty()).unwrap())
+        .oneshot(Request::get(format!("/api/v1/rules?stream_id={}", stream1)).body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(response.status(), 200);
@@ -216,7 +216,7 @@ async fn test_api_rules_per_stream_has_default() {
     let stream_id = create_stream(&app, "test-stream").await;
 
     let response = app
-        .oneshot(Request::get(&format!("/api/v1/streams/{}/rules", stream_id)).body(Body::empty()).unwrap())
+        .oneshot(Request::get(format!("/api/v1/streams/{}/rules", stream_id)).body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(response.status(), 200);
@@ -333,7 +333,7 @@ async fn test_api_rules_get_by_index() {
 
     // Default rule is at index 0
     let response = app
-        .oneshot(Request::get(&format!("/api/v1/streams/{}/rules/0", stream_id)).body(Body::empty()).unwrap())
+        .oneshot(Request::get(format!("/api/v1/streams/{}/rules/0", stream_id)).body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(response.status(), 200);
@@ -353,7 +353,7 @@ async fn test_api_rules_get_by_index_not_found() {
 
     // Only 1 default rule exists, so index 1 should 404
     let response = app
-        .oneshot(Request::get(&format!("/api/v1/streams/{}/rules/1", stream_id)).body(Body::empty()).unwrap())
+        .oneshot(Request::get(format!("/api/v1/streams/{}/rules/1", stream_id)).body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(response.status(), 404);
@@ -376,7 +376,7 @@ async fn test_api_rules_update() {
     assert_eq!(response.status(), 200);
 
     let response = app
-        .oneshot(Request::get(&format!("/api/v1/streams/{}/rules/0", stream_id)).body(Body::empty()).unwrap())
+        .oneshot(Request::get(format!("/api/v1/streams/{}/rules/0", stream_id)).body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(response.status(), 200);
@@ -418,7 +418,7 @@ async fn test_api_rules_delete_default_then_add() {
     assert_eq!(response.status(), 204);
 
     let response = app.clone()
-        .oneshot(Request::get(&format!("/api/v1/streams/{}/rules", stream_id)).body(Body::empty()).unwrap())
+        .oneshot(Request::get(format!("/api/v1/streams/{}/rules", stream_id)).body(Body::empty()).unwrap())
         .await
         .unwrap();
     assert_eq!(response.status(), 200);
