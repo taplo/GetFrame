@@ -1,8 +1,10 @@
 # Stage 1: Web UI build
 FROM node:20-alpine AS web-builder
 WORKDIR /web
-COPY web/package.json web/ ./
-RUN npm ci && npm run build
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
 
 # Stage 2: Rust binary (glibc, Debian FFmpeg)
 FROM rust:1.91-slim-bookworm AS rust-builder

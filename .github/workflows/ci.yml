@@ -106,12 +106,9 @@ jobs:
         working-directory: web
 
   docker:
-    needs: test
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, frontend]
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    outputs:
-      tags: ${{ steps.meta.outputs.tags }}
-      labels: ${{ steps.meta.outputs.labels }}
 
     steps:
       - uses: actions/checkout@v4
@@ -124,35 +121,35 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ secrets.DOCKER_USERNAME }}/getframe-worker
+            ghcr.io/${{ github.repository_owner }}/getframe-worker
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=pr
+            type=sha,prefix=,enable={{is_default_branch}}
           flavor: |
             latest=false
 
-      - name: Login to Docker Hub
-        if: github.event_name != 'pull_request'
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   release:
-    needs: docker
     if: startsWith(github.ref, 'refs/tags/v')
+    needs: docker
     runs-on: ubuntu-latest
     permissions:
       contents: write
