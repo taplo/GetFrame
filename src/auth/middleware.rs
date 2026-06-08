@@ -66,8 +66,8 @@ pub async fn auth_middleware(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
-    if let Some(ref auth_val) = auth_header {
-        if let Some(token) = auth_val.strip_prefix("Bearer ") {
+    if let Some(ref auth_val) = auth_header
+        && let Some(token) = auth_val.strip_prefix("Bearer ") {
             match jwt::decode_jwt(token, &state.jwt_secret) {
                 Ok(claims) => {
                     let mut req = req;

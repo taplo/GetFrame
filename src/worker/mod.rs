@@ -213,7 +213,7 @@ impl WorkerManager {
             resource_type: "system".into(),
             resource_id: None,
             actor: format!("worker:{}", self.worker_id),
-            description: format!("Worker 释放所有认领"),
+            description: "Worker 释放所有认领".to_string(),
             details: None,
             recorded_at: chrono::Utc::now(),
         }).await;
