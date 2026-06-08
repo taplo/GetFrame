@@ -6,6 +6,29 @@ use axum::{
 use serde_json::{json, Value};
 use tower::ServiceExt;
 use http_body_util::BodyExt;
+use getframe_worker::auth::AuthUser;
+
+fn with_auth(req: &mut Request<Body>, id: &str, username: &str, role: &str) {
+    req.extensions_mut().insert(AuthUser {
+        id: id.to_string(),
+        username: username.to_string(),
+        role: role.to_string(),
+    });
+}
+
+fn admin_req(uri: &str, method: Method, body: Body) -> Request<Body> {
+    let builder = Request::builder()
+        .method(method)
+        .uri(uri);
+    let builder = if method == Method::POST || method == Method::PUT {
+        builder.header("content-type", "application/json")
+    } else {
+        builder
+    };
+    let mut req = builder.body(body).unwrap();
+    with_auth(&mut req, "1", "admin", "admin");
+    req
+}
 
 async fn build_test_app() -> axum::Router {
     use getframe_worker::config::{StorageConfig, KafkaConfig};
@@ -58,14 +81,11 @@ async fn create_test_stream(app: &axum::Router) -> String {
             "rtsp_transport": "tcp"
         }
     });
-    let response = app.clone().oneshot(
-        Request::builder()
-            .method(Method::POST)
-            .uri("/api/v1/streams")
-            .header("content-type", "application/json")
-            .body(Body::from(serde_json::to_string(&config).unwrap()))
-            .unwrap()
-    ).await.unwrap();
+    let response = app.clone().oneshot(admin_req(
+        "/api/v1/streams",
+        Method::POST,
+        Body::from(serde_json::to_string(&config).unwrap()),
+    )).await.unwrap();
     let body: Value = body_to_json(response.into_body()).await;
     body["id"].as_str().unwrap().to_string()
 }
@@ -82,14 +102,11 @@ async fn test_task_lifecycle() {
     });
 
     // POST /api/v1/tasks -> 201 Created
-    let response = app.clone().oneshot(
-        Request::builder()
-            .method(Method::POST)
-            .uri("/api/v1/tasks")
-            .header("content-type", "application/json")
-            .body(Body::from(serde_json::to_string(&req_body).unwrap()))
-            .unwrap()
-    ).await.unwrap();
+    let response = app.clone().oneshot(admin_req(
+        "/api/v1/tasks",
+        Method::POST,
+        Body::from(serde_json::to_string(&req_body).unwrap()),
+    )).await.unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     let task: Value = body_to_json(response.into_body()).await;
     let task_id = task["id"].as_str().unwrap().to_string();
@@ -109,13 +126,11 @@ async fn test_task_lifecycle() {
     assert_eq!(task["status"], "Created");
 
     // DELETE /api/v1/tasks/{id} -> 204
-    let response = app.clone().oneshot(
-        Request::builder()
-            .method(Method::DELETE)
-            .uri(format!("/api/v1/tasks/{}", task_id))
-            .body(Body::empty())
-            .unwrap()
-    ).await.unwrap();
+    let response = app.clone().oneshot(admin_req(
+        &format!("/api/v1/tasks/{}", task_id),
+        Method::DELETE,
+        Body::empty(),
+    )).await.unwrap();
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 }
 
@@ -130,14 +145,11 @@ async fn test_list_tasks() {
         "rules": []
     });
 
-    let response = app.clone().oneshot(
-        Request::builder()
-            .method(Method::POST)
-            .uri("/api/v1/tasks")
-            .header("content-type", "application/json")
-            .body(Body::from(serde_json::to_string(&req_body).unwrap()))
-            .unwrap()
-    ).await.unwrap();
+    let response = app.clone().oneshot(admin_req(
+        "/api/v1/tasks",
+        Method::POST,
+        Body::from(serde_json::to_string(&req_body).unwrap()),
+    )).await.unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
 
     let req_body2 = json!({
@@ -146,14 +158,11 @@ async fn test_list_tasks() {
         "rules": []
     });
 
-    let response = app.clone().oneshot(
-        Request::builder()
-            .method(Method::POST)
-            .uri("/api/v1/tasks")
-            .header("content-type", "application/json")
-            .body(Body::from(serde_json::to_string(&req_body2).unwrap()))
-            .unwrap()
-    ).await.unwrap();
+    let response = app.clone().oneshot(admin_req(
+        "/api/v1/tasks",
+        Method::POST,
+        Body::from(serde_json::to_string(&req_body2).unwrap()),
+    )).await.unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
 
     // GET /api/v1/tasks -> 200 with 2 tasks
@@ -189,13 +198,10 @@ async fn test_get_nonexistent_task() {
 async fn test_create_task_invalid_body() {
     let app = build_test_app().await;
 
-    let response = app.clone().oneshot(
-        Request::builder()
-            .method(Method::POST)
-            .uri("/api/v1/tasks")
-            .header("content-type", "application/json")
-            .body(Body::from(r#"{"name": "incomplete"}"#))
-            .unwrap()
-    ).await.unwrap();
+    let response = app.clone().oneshot(admin_req(
+        "/api/v1/tasks",
+        Method::POST,
+        Body::from(r#"{"name": "incomplete"}"#),
+    )).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
