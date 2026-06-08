@@ -738,4 +738,115 @@ mod tests {
         let ev = IntervalEvaluator::new(1.0, (0, 1));
         assert_eq!(ev.interval_pts, 0);
     }
+
+    #[test]
+    fn test_rule_engine_with_static_frame_and_interval() {
+        let rules = vec![
+            RuleConfig::Interval { interval_seconds: 10.0 },
+            RuleConfig::StaticFrame {
+                threshold: 0.05,
+                method: ComparisonMethod::PixelDiff,
+                force: false,
+            },
+        ];
+        let mut engine = RuleEngine::new(&rules, (1, 30));
+
+        // First frame — always extracted (interval triggers + not static)
+        let mut f0 = make_frame(0, 0, None);
+        f0.static_frame_score = Some(false);
+        assert!(engine.evaluate(&f0));
+
+        // Same content, before interval — static, interval not due → skip
+        let mut f1 = make_frame(5, 1, None);
+        f1.static_frame_score = Some(true);
+        assert!(!engine.evaluate(&f1));
+
+        // Interval due but static → skip (StaticFrame gates it)
+        let mut f2 = make_frame(300, 2, None);
+        f2.static_frame_score = Some(true);
+        assert!(!engine.evaluate(&f2));
+
+        // Interval due AND changed → extract
+        let mut f3 = make_frame(600, 3, None);
+        f3.static_frame_score = Some(false);
+        assert!(engine.evaluate(&f3));
+    }
+
+    #[test]
+    fn test_static_frame_serde_with_all_methods() {
+        for method in &[ComparisonMethod::PixelDiff, ComparisonMethod::PerceptualHash, ComparisonMethod::Ssim] {
+            let cfg = RuleConfig::StaticFrame {
+                threshold: 0.1,
+                method: *method,
+                force: false,
+            };
+            let json = serde_json::to_string(&cfg).unwrap();
+            let back: RuleConfig = serde_json::from_str(&json).unwrap();
+            assert_eq!(cfg.description(), back.description());
+        }
+    }
+
+    #[test]
+    fn test_static_frame_force_via_composite() {
+        // In a Composite(Any), if StaticFrame returns false but Interval returns true, extract
+        let rules = vec![RuleConfig::Composite {
+            operator: CompositeOperator::Any,
+            rules: vec![
+                RuleConfig::Interval { interval_seconds: 5.0 },
+                RuleConfig::StaticFrame {
+                    threshold: 0.05,
+                    method: ComparisonMethod::PixelDiff,
+                    force: false,
+                },
+            ],
+        }];
+        let mut engine = RuleEngine::new(&rules, (1, 30));
+
+        // First frame — interval triggers
+        let mut f0 = make_frame(0, 0, None);
+        f0.static_frame_score = Some(false);
+        assert!(engine.evaluate(&f0));
+
+        // Static frame before interval — StaticFrame says skip, but Interval says skip too (not due) → skip
+        let mut f1 = make_frame(5, 1, None);
+        f1.static_frame_score = Some(true);
+        assert!(!engine.evaluate(&f1));
+
+        // Interval due even if static — Composite Any means Interval triggers → extract
+        let mut f2 = make_frame(150, 2, None);
+        f2.static_frame_score = Some(true);
+        assert!(engine.evaluate(&f2));
+    }
+
+    #[test]
+    fn test_static_frame_composite_all() {
+        // Composite(All) with Interval + StaticFrame — both must trigger
+        let rules = vec![RuleConfig::Composite {
+            operator: CompositeOperator::All,
+            rules: vec![
+                RuleConfig::Interval { interval_seconds: 5.0 },
+                RuleConfig::StaticFrame {
+                    threshold: 0.05,
+                    method: ComparisonMethod::PixelDiff,
+                    force: false,
+                },
+            ],
+        }];
+        let mut engine = RuleEngine::new(&rules, (1, 30));
+
+        // First frame — interval + changed → both trigger
+        let mut f0 = make_frame(0, 0, None);
+        f0.static_frame_score = Some(false);
+        assert!(engine.evaluate(&f0));
+
+        // Interval due but static → StaticFrame blocks → skip
+        let mut f1 = make_frame(150, 1, None);
+        f1.static_frame_score = Some(true);
+        assert!(!engine.evaluate(&f1));
+
+        // Both due and changed → extract
+        let mut f2 = make_frame(300, 2, None);
+        f2.static_frame_score = Some(false);
+        assert!(engine.evaluate(&f2));
+    }
 }
