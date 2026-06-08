@@ -1,3 +1,4 @@
+pub mod comparator;
 pub mod ingest;
 pub mod decode;
 pub mod rule;
