@@ -1,6 +1,7 @@
 use std::sync::Arc;
-use axum::Router;
+use axum::{Router, middleware::from_fn};
 use sqlx::MySqlPool;
+use getframe_worker::auth::AuthUser;
 use getframe_worker::stream::StreamManager;
 use getframe_worker::task::TaskManager;
 use getframe_worker::api::api_router;
@@ -13,6 +14,19 @@ pub fn test_app(pool: MySqlPool) -> Router {
     let sm = StreamManager::new(storage, kafka).with_db(pool.clone());
     let tm = Arc::new(TaskManager::new(Arc::new(sm.clone()), Some(pool.clone())));
     let health_state = HealthState::new(Some(Arc::new(sm.registry().clone())));
+
+    async fn inject_auth(mut req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next<axum::body::Body>) -> axum::response::Response {
+        if req.extensions().get::<AuthUser>().is_none() {
+            req.extensions_mut().insert(AuthUser {
+                id: "test-admin".into(),
+                username: "admin".into(),
+                role: "admin".into(),
+            });
+        }
+        next.run(req).await
+    }
+
     health_router(health_state)
         .merge(api_router(sm, tm, Some(pool)))
+        .layer(from_fn(inject_auth))
 }
