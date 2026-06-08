@@ -17,15 +17,15 @@ fn with_auth(req: &mut Request<Body>, id: &str, username: &str, role: &str) {
 }
 
 fn admin_req(uri: &str, method: Method, body: Body) -> Request<Body> {
+    let is_json = method == Method::POST || method == Method::PUT;
     let builder = Request::builder()
         .method(method)
         .uri(uri);
-    let builder = if method == Method::POST || method == Method::PUT {
+    let mut req = if is_json {
         builder.header("content-type", "application/json")
     } else {
         builder
-    };
-    let mut req = builder.body(body).unwrap();
+    }.body(body).unwrap();
     with_auth(&mut req, "1", "admin", "admin");
     req
 }
