@@ -3,6 +3,14 @@ use serde::{Deserialize, Serialize};
 use super::filter::SceneDetectFilter;
 use utoipa::ToSchema;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ComparisonMethod {
+    PixelDiff,
+    PerceptualHash,
+    Ssim,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "type")]
 #[schema(no_recursion)]
@@ -23,6 +31,13 @@ pub enum RuleConfig {
     #[serde(rename = "scene_change")]
     SceneChange {
         threshold: f64,
+    },
+    #[serde(rename = "static_frame")]
+    StaticFrame {
+        threshold: f64,
+        method: ComparisonMethod,
+        #[serde(default)]
+        force: bool,
     },
     #[serde(rename = "composite")]
     Composite {
@@ -54,6 +69,14 @@ impl RuleConfig {
             }
             RuleConfig::SceneChange { threshold } => {
                 format!("scene-change/{:.2}", threshold)
+            }
+            RuleConfig::StaticFrame { threshold, method, force } => {
+                let f = if *force { ",force" } else { "" };
+                format!("static-frame/{:.3}/{}{f}", threshold, match method {
+                    ComparisonMethod::PixelDiff => "pixdiff",
+                    ComparisonMethod::PerceptualHash => "phash",
+                    ComparisonMethod::Ssim => "ssim",
+                })
             }
             RuleConfig::Composite { operator, rules } => {
                 let descs: Vec<String> = rules.iter().map(|r| r.description()).collect();
@@ -88,6 +111,9 @@ pub fn create_evaluator(config: &RuleConfig, time_base: (i32, i32)) -> Box<dyn R
         RuleConfig::SceneChange { threshold } => {
             Box::new(SceneChangeEvaluator::new(*threshold))
         }
+        RuleConfig::StaticFrame { threshold, method, force } => {
+            Box::new(StaticFrameEvaluator::new(*threshold, *method, *force))
+        }
         RuleConfig::Composite { operator, rules } => {
             let inner: Vec<Box<dyn RuleEvaluator>> = rules.iter()
                 .map(|r| create_evaluator(r, time_base))
@@ -107,6 +133,36 @@ fn matches_scene_change(config: &RuleConfig) -> bool {
         RuleConfig::Composite { rules, .. } => rules.iter().any(matches_scene_change),
         _ => false,
     }
+}
+
+pub fn has_static_frame_rule(configs: &[RuleConfig]) -> bool {
+    configs.iter().any(matches_static_frame)
+}
+
+fn matches_static_frame(config: &RuleConfig) -> bool {
+    match config {
+        RuleConfig::StaticFrame { .. } => true,
+        RuleConfig::Composite { rules, .. } => rules.iter().any(matches_static_frame),
+        _ => false,
+    }
+}
+
+pub fn find_static_frame_config(
+    evaluators: &[(RuleConfig, Box<dyn RuleEvaluator>)],
+) -> Option<(f64, ComparisonMethod, bool)> {
+    for (config, _) in evaluators {
+        if let RuleConfig::StaticFrame { threshold, method, force } = config {
+            return Some((*threshold, *method, *force));
+        }
+        if let RuleConfig::Composite { rules, .. } = config {
+            for rule in rules {
+                if let RuleConfig::StaticFrame { threshold, method, force } = rule {
+                    return Some((*threshold, *method, *force));
+                }
+            }
+        }
+    }
+    None
 }
 
 pub struct IntervalEvaluator {
@@ -226,6 +282,36 @@ impl RuleEvaluator for SceneChangeEvaluator {
 
     fn description(&self) -> String {
         format!("scene-change/{:.2}", self.threshold)
+    }
+}
+
+pub struct StaticFrameEvaluator {
+    threshold: f64,
+    method: ComparisonMethod,
+    force: bool,
+}
+
+impl StaticFrameEvaluator {
+    pub fn new(threshold: f64, method: ComparisonMethod, force: bool) -> Self {
+        Self { threshold, method, force }
+    }
+}
+
+impl RuleEvaluator for StaticFrameEvaluator {
+    fn should_extract(&mut self, frame: &DecodedFrame) -> bool {
+        match frame.static_frame_score {
+            Some(true) => self.force,
+            Some(false) => true,
+            None => true,
+        }
+    }
+
+    fn description(&self) -> String {
+        format!("static-frame/{:.3}/{}", self.threshold, match self.method {
+            ComparisonMethod::PixelDiff => "pixdiff",
+            ComparisonMethod::PerceptualHash => "phash",
+            ComparisonMethod::Ssim => "ssim",
+        })
     }
 }
 
@@ -363,6 +449,7 @@ mod tests {
             is_keyframe: true,
             frame_number,
             scene_change_score: scene_score,
+            static_frame_score: None,
         }
     }
 
@@ -550,6 +637,16 @@ mod tests {
                     RuleConfig::SceneChange { threshold: 0.5 },
                 ],
             },
+            RuleConfig::StaticFrame {
+                threshold: 0.05,
+                method: ComparisonMethod::PixelDiff,
+                force: false,
+            },
+            RuleConfig::StaticFrame {
+                threshold: 0.15,
+                method: ComparisonMethod::PerceptualHash,
+                force: true,
+            },
         ];
         let json = serde_json::to_string(&configs).unwrap();
         let deserialized: Vec<RuleConfig> = serde_json::from_str(&json).unwrap();
@@ -557,6 +654,62 @@ mod tests {
         for (a, b) in configs.iter().zip(deserialized.iter()) {
             assert_eq!(a.description(), b.description());
         }
+    }
+
+    #[test]
+    fn test_static_frame_blocks_static() {
+        let mut ev = StaticFrameEvaluator::new(0.05, ComparisonMethod::PixelDiff, false);
+        let mut frame = make_frame(0, 0, None);
+        frame.static_frame_score = Some(true);
+        assert!(!ev.should_extract(&frame));
+    }
+
+    #[test]
+    fn test_static_frame_passes_changed() {
+        let mut ev = StaticFrameEvaluator::new(0.05, ComparisonMethod::PixelDiff, false);
+        let mut frame = make_frame(0, 0, None);
+        frame.static_frame_score = Some(false);
+        assert!(ev.should_extract(&frame));
+    }
+
+    #[test]
+    fn test_static_frame_default_none() {
+        let mut ev = StaticFrameEvaluator::new(0.05, ComparisonMethod::PixelDiff, false);
+        let frame = make_frame(0, 0, None);
+        assert!(ev.should_extract(&frame));
+    }
+
+    #[test]
+    fn test_static_frame_force_overrides() {
+        let mut ev = StaticFrameEvaluator::new(0.05, ComparisonMethod::PixelDiff, true);
+        let mut frame = make_frame(0, 0, None);
+        frame.static_frame_score = Some(true);
+        assert!(ev.should_extract(&frame));
+    }
+
+    #[test]
+    fn test_has_static_frame_rule() {
+        let no_static = vec![RuleConfig::Interval { interval_seconds: 1.0 }];
+        assert!(!has_static_frame_rule(&no_static));
+
+        let with_static = vec![RuleConfig::StaticFrame {
+            threshold: 0.05, method: ComparisonMethod::PixelDiff, force: false,
+        }];
+        assert!(has_static_frame_rule(&with_static));
+
+        let nested = vec![RuleConfig::Composite {
+            operator: CompositeOperator::Any,
+            rules: vec![RuleConfig::StaticFrame {
+                threshold: 0.05, method: ComparisonMethod::PixelDiff, force: false,
+            }],
+        }];
+        assert!(has_static_frame_rule(&nested));
+    }
+
+    #[test]
+    fn test_static_frame_description() {
+        let ev = StaticFrameEvaluator::new(0.05, ComparisonMethod::PixelDiff, false);
+        assert!(ev.description().contains("static-frame"));
     }
 
     #[test]

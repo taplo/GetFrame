@@ -21,6 +21,7 @@ pub struct DecodedFrame {
     pub is_keyframe: bool,
     pub frame_number: FrameNumber,
     pub scene_change_score: Option<f64>,
+    pub static_frame_score: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -138,11 +139,13 @@ mod tests {
             is_keyframe: false,
             frame_number: 0,
             scene_change_score: None,
+            static_frame_score: None,
         };
         assert_eq!(frame.width, 640);
         assert_eq!(frame.height, 480);
         assert!(!frame.is_keyframe);
         assert!(frame.scene_change_score.is_none());
+        assert!(frame.static_frame_score.is_none());
     }
 
     #[test]
