@@ -1,5 +1,5 @@
 import { request } from "./client"
-import type { ActivityEvent, ActivityQuery, ActivityListResponse } from "@/types/activity"
+import type { ActivityQuery, ActivityListResponse } from "@/types/activity"
 
 function buildQuery(params: ActivityQuery): string {
   const search = new URLSearchParams()
