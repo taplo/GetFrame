@@ -50,6 +50,7 @@ pub fn run_decode_pipeline(
     let mut t_scdet_sum: Duration = Duration::ZERO;
     let mut t_rule_sum: Duration = Duration::ZERO;
     let mut t_jpeg_sum: Duration = Duration::ZERO;
+    let mut t_static_sum: Duration = Duration::ZERO;
     let mut timing_count: u64 = 0;
 
     let mut rule_engine = {
@@ -118,6 +119,31 @@ pub fn run_decode_pipeline(
                     };
                     t_scdet_sum += _scd_start.elapsed();
 
+                    // Static frame comparison
+                    let _static_start = Instant::now();
+                    let static_frame_score = if rule_engine.static_frame_enabled() {
+                        let y_data = frame.data(0);
+                        let y_stride = frame.stride(0) as u32;
+                        let width = demuxed.width;
+                        let height = demuxed.height;
+                        let y_region: Vec<u8> = if y_stride == width {
+                            y_data.to_vec()
+                        } else {
+                            y_data.chunks(y_stride as usize)
+                                .take(height as usize)
+                                .flat_map(|row| &row[..width as usize])
+                                .copied()
+                                .collect()
+                        };
+                        match &mut rule_engine.frame_comparator {
+                            Some(cmp) => cmp.is_static(&y_region, width, height).ok(),
+                            None => None,
+                        }
+                    } else {
+                        None
+                    };
+                    t_static_sum += _static_start.elapsed();
+
                     let _copy_start = Instant::now();
                     let decoded = DecodedFrame {
                         stream_id,
@@ -134,6 +160,7 @@ pub fn run_decode_pipeline(
                         is_keyframe: is_key,
                         frame_number: total_frames_decoded - 1,
                         scene_change_score,
+                        static_frame_score,
                     };
                     t_copy_sum += _copy_start.elapsed();
 
@@ -213,6 +240,7 @@ pub fn run_decode_pipeline(
                         let scdet_us = (t_scdet_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
                         let rule_us = (t_rule_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
                         let jpeg_us = (t_jpeg_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
+                        let static_us = (t_static_sum.as_secs_f64() * 1_000_000.0 / timing_count as f64) as u64;
 
                         let id_label = stream_id.to_string();
                         metrics::gauge!("getframe_stream_decode_latency_ms", "stream_id" => id_label.clone()).set(decode_us as f64 / 1000.0);
@@ -223,6 +251,7 @@ pub fn run_decode_pipeline(
                             avg_decode_us = decode_us,
                             avg_copy_us = copy_us,
                             avg_scdet_us = scdet_us,
+                            avg_static_us = static_us,
                             avg_rule_us = rule_us,
                             avg_jpeg_us = jpeg_us,
                             "Pipeline timing"
@@ -230,6 +259,7 @@ pub fn run_decode_pipeline(
                         t_decode_sum = Duration::ZERO;
                         t_copy_sum = Duration::ZERO;
                         t_scdet_sum = Duration::ZERO;
+                        t_static_sum = Duration::ZERO;
                         t_rule_sum = Duration::ZERO;
                         t_jpeg_sum = Duration::ZERO;
                         timing_count = 0;
@@ -271,6 +301,7 @@ pub fn run_decode_pipeline(
                         is_keyframe: is_key,
                         frame_number: total_frames_decoded - 1,
                         scene_change_score: None,
+                        static_frame_score: None,
                     };
                     pts_queue.insert(pts, decoded);
                 }
