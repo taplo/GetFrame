@@ -82,7 +82,6 @@ pub async fn auth_middleware(
                     return (StatusCode::UNAUTHORIZED, "invalid token").into_response();
                 }
             }
-        }
     }
 
     (StatusCode::UNAUTHORIZED, "missing authorization").into_response()
