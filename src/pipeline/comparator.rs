@@ -39,9 +39,8 @@ impl FrameComparator {
                     (distance as f64 / 63.0) <= self.threshold
                 }
                 ComparisonMethod::Ssim => {
-                    let prev_y = self.prev_y.as_ref().unwrap();
-                    let ssim_val = Self::ssim(prev_y, y_plane, self.prev_width, self.prev_height);
-                    ssim_val < self.threshold
+                    let ssim_val = Self::ssim(prev, y_plane, self.prev_width, self.prev_height);
+                    ssim_val >= self.threshold
                 }
             }
         };
