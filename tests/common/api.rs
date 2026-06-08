@@ -1,5 +1,10 @@
 use std::sync::Arc;
-use axum::{Router, middleware::from_fn};
+use axum::{
+    Router,
+    extract::Request,
+    middleware::{from_fn, Next},
+    response::Response,
+};
 use sqlx::MySqlPool;
 use getframe_worker::auth::AuthUser;
 use getframe_worker::stream::StreamManager;
@@ -15,7 +20,7 @@ pub fn test_app(pool: MySqlPool) -> Router {
     let tm = Arc::new(TaskManager::new(Arc::new(sm.clone()), Some(pool.clone())));
     let health_state = HealthState::new(Some(Arc::new(sm.registry().clone())));
 
-    async fn inject_auth(mut req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next<axum::body::Body>) -> axum::response::Response {
+    async fn inject_auth(mut req: Request, next: Next) -> Response {
         if req.extensions().get::<AuthUser>().is_none() {
             req.extensions_mut().insert(AuthUser {
                 id: "test-admin".into(),

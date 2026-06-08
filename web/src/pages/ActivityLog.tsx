@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { activityApi } from "../api/activity";
-import type { ActivityEvent, ActivityQuery } from "../types/activity";
+import type { ActivityQuery, ActivityListResponse } from "../types/activity";
 
 const EVENT_TYPE_OPTIONS = [
   { value: "", label: "全部类型" },
@@ -41,7 +41,7 @@ function resourceBadge(type: string): { label: string; color: string } {
 }
 
 export default function ActivityLog() {
-  const [items, setItems] = useState<ActivityEvent[]>([]);
+  const [items, setItems] = useState<ActivityListResponse["items"]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);

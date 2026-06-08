@@ -88,7 +88,7 @@ export default function RulesPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item, i) => (
+              {items.map((item) => (
                 <tr key={`${item.stream_id}-${item.index}`} className="border-b last:border-0 hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <button onClick={() => navigate(`/streams/${item.stream_id}`)} className="text-brand hover:underline font-medium text-left">{item.stream_name}</button>
