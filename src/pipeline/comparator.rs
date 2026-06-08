@@ -39,7 +39,9 @@ impl FrameComparator {
                     (distance as f64 / 63.0) <= self.threshold
                 }
                 ComparisonMethod::Ssim => {
-                    false // placeholder — implemented in Task 5
+                    let prev_y = self.prev_y.as_ref().unwrap();
+                    let ssim_val = Self::ssim(prev_y, y_plane, self.prev_width, self.prev_height);
+                    ssim_val < self.threshold
                 }
             }
         };
@@ -114,6 +116,63 @@ impl FrameComparator {
 
     fn hamming_distance(a: u64, b: u64) -> u32 {
         (a ^ b).count_ones()
+    }
+
+    fn ssim(a: &[u8], b: &[u8], width: u32, height: u32) -> f64 {
+        const C1: f64 = (0.01 * 255.0) * (0.01 * 255.0);
+        const C2: f64 = (0.03 * 255.0) * (0.03 * 255.0);
+        const WINDOW: usize = 8;
+        const STEP: usize = 4;
+
+        let w = width as usize;
+        let h = height as usize;
+        let mut total_ssim = 0.0;
+        let mut count = 0;
+
+        let mut y = 0;
+        while y + WINDOW <= h {
+            let mut x = 0;
+            while x + WINDOW <= w {
+                let mut mu_a = 0.0;
+                let mut mu_b = 0.0;
+                for dy in 0..WINDOW {
+                    for dx in 0..WINDOW {
+                        let idx = (y + dy) * w + (x + dx);
+                        mu_a += a[idx] as f64;
+                        mu_b += b[idx] as f64;
+                    }
+                }
+                let n = (WINDOW * WINDOW) as f64;
+                mu_a /= n;
+                mu_b /= n;
+
+                let mut var_a = 0.0;
+                let mut var_b = 0.0;
+                let mut covar = 0.0;
+                for dy in 0..WINDOW {
+                    for dx in 0..WINDOW {
+                        let idx = (y + dy) * w + (x + dx);
+                        let da = a[idx] as f64 - mu_a;
+                        let db = b[idx] as f64 - mu_b;
+                        var_a += da * da;
+                        var_b += db * db;
+                        covar += da * db;
+                    }
+                }
+                var_a /= n;
+                var_b /= n;
+                covar /= n;
+
+                let num = (2.0 * mu_a * mu_b + C1) * (2.0 * covar + C2);
+                let den = (mu_a * mu_a + mu_b * mu_b + C1) * (var_a + var_b + C2);
+                total_ssim += num / den;
+                count += 1;
+                x += STEP;
+            }
+            y += STEP;
+        }
+
+        if count == 0 { 1.0 } else { total_ssim / count as f64 }
     }
 
     fn reset(&mut self) {
@@ -193,5 +252,31 @@ mod tests {
         let mut cmp = FrameComparator::new(ComparisonMethod::PerceptualHash, 0.0);
         assert!(!cmp.is_static(&y, 320, 240).unwrap());
         assert!(cmp.is_static(&y, 320, 240).unwrap());
+    }
+
+    #[test]
+    fn test_ssim_identical_frames() {
+        let y = vec![128u8; 320 * 240];
+        let mut cmp = FrameComparator::new(ComparisonMethod::Ssim, 0.95);
+        assert!(!cmp.is_static(&y, 320, 240).unwrap());
+        assert!(cmp.is_static(&y, 320, 240).unwrap());
+    }
+
+    #[test]
+    fn test_ssim_different_frames() {
+        let y1 = vec![0u8; 320 * 240];
+        let y2 = vec![255u8; 320 * 240];
+        let mut cmp = FrameComparator::new(ComparisonMethod::Ssim, 0.95);
+        assert!(!cmp.is_static(&y1, 320, 240).unwrap());
+        assert!(!cmp.is_static(&y2, 320, 240).unwrap());
+    }
+
+    #[test]
+    fn test_ssim_threshold_one() {
+        let y1 = vec![100u8; 320 * 240];
+        let y2 = vec![101u8; 320 * 240];
+        let mut cmp = FrameComparator::new(ComparisonMethod::Ssim, 1.0);
+        assert!(!cmp.is_static(&y1, 320, 240).unwrap());
+        assert!(!cmp.is_static(&y2, 320, 240).unwrap());
     }
 }
