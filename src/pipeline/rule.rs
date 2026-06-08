@@ -393,10 +393,7 @@ impl RuleEngine {
         }
         self.static_frame_enabled = has_static_frame_rule(configs);
         if self.static_frame_enabled {
-            let configs_with_eval: Vec<(RuleConfig, Box<dyn RuleEvaluator>)> = configs.iter()
-                .map(|c| (c.clone(), create_evaluator(c, time_base)))
-                .collect();
-            self.frame_comparator = find_static_frame_config(&configs_with_eval)
+            self.frame_comparator = find_static_frame_config(&self.evaluators)
                 .map(|(t, m, _f)| FrameComparator::new(m, t));
         } else {
             self.frame_comparator = None;

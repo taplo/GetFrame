@@ -136,7 +136,13 @@ pub fn run_decode_pipeline(
                                 .collect()
                         };
                         match &mut rule_engine.frame_comparator {
-                            Some(cmp) => cmp.is_static(&y_region, width, height).ok(),
+                            Some(cmp) => match cmp.is_static(&y_region, width, height) {
+                                Ok(result) => Some(result),
+                                Err(e) => {
+                                    tracing::warn!(stream_id = %stream_id, error = %e, "Static frame comparison failed");
+                                    None
+                                }
+                            }
                             None => None,
                         }
                     } else {
