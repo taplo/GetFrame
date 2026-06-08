@@ -33,11 +33,10 @@ impl FrameComparator {
                     diff <= self.threshold
                 }
                 ComparisonMethod::PerceptualHash => {
-                    let prev_y = self.prev_y.as_ref().unwrap();
-                    let hash_prev = Self::phash(prev_y, self.prev_width, self.prev_height);
+                    let hash_prev = Self::phash(prev, self.prev_width, self.prev_height);
                     let hash_curr = Self::phash(y_plane, width, height);
                     let distance = Self::hamming_distance(hash_prev, hash_curr);
-                    (distance as f64 / 64.0) <= self.threshold
+                    (distance as f64 / 63.0) <= self.threshold
                 }
                 ComparisonMethod::Ssim => {
                     false // placeholder — implemented in Task 5
@@ -102,11 +101,8 @@ impl FrameComparator {
                 values.push(dct[u][v]);
             }
         }
-        let median = {
-            let mut sorted = values.clone();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            sorted[sorted.len() / 2]
-        };
+        values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let median = values[values.len() / 2];
         let mut hash = 0u64;
         for (i, &val) in values.iter().enumerate() {
             if val > median {
@@ -183,8 +179,9 @@ mod tests {
 
     #[test]
     fn test_phash_different_frames() {
-        let y1 = vec![0u8; 320 * 240];
-        let y2 = vec![255u8; 320 * 240];
+        // Horizontal gradient vs vertical gradient — different spatial structure
+        let y1: Vec<u8> = (0..240).flat_map(|y| (0..320).map(move |x| ((x * 255 / 319) as u8)).collect::<Vec<_>>()).collect();
+        let y2: Vec<u8> = (0..240).flat_map(|y| (0..320).map(move |_| ((y * 255 / 239) as u8)).collect::<Vec<_>>()).collect();
         let mut cmp = FrameComparator::new(ComparisonMethod::PerceptualHash, 0.1);
         assert!(!cmp.is_static(&y1, 320, 240).unwrap());
         assert!(!cmp.is_static(&y2, 320, 240).unwrap());
