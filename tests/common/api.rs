@@ -12,6 +12,17 @@ use getframe_worker::task::TaskManager;
 use getframe_worker::api::api_router;
 use getframe_worker::health::{health_router, HealthState};
 
+async fn inject_auth(mut req: Request, next: Next) -> Response {
+    if req.extensions().get::<AuthUser>().is_none() {
+        req.extensions_mut().insert(AuthUser {
+            id: "test-admin".into(),
+            username: "admin".into(),
+            role: "admin".into(),
+        });
+    }
+    next.run(req).await
+}
+
 #[allow(dead_code)]
 pub fn test_app(pool: MySqlPool) -> Router {
     let storage = Arc::new(getframe_worker::storage::StorageClient::noop());
@@ -19,17 +30,6 @@ pub fn test_app(pool: MySqlPool) -> Router {
     let sm = StreamManager::new(storage, kafka).with_db(pool.clone());
     let tm = Arc::new(TaskManager::new(Arc::new(sm.clone()), Some(pool.clone())));
     let health_state = HealthState::new(Some(Arc::new(sm.registry().clone())));
-
-    async fn inject_auth(mut req: Request, next: Next) -> Response {
-        if req.extensions().get::<AuthUser>().is_none() {
-            req.extensions_mut().insert(AuthUser {
-                id: "test-admin".into(),
-                username: "admin".into(),
-                role: "admin".into(),
-            });
-        }
-        next.run(req).await
-    }
 
     health_router(health_state)
         .merge(api_router(sm, tm, Some(pool)))
