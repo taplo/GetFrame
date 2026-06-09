@@ -13,3 +13,7 @@ test.obj
 
 tmp_test_parallel*.txt
 docs/
+
+# Local test artifacts
+static-test/
+tmp_videos/
