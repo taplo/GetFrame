@@ -39,6 +39,7 @@ async fn test_encode_jpeg() {
         is_keyframe: true,
         frame_number: 0,
         scene_change_score: None,
+        static_frame_score: None,
     };
     let bytes = encode_jpeg(&frame, 85).unwrap();
     assert!(!bytes.is_empty(), "JPEG output is empty");

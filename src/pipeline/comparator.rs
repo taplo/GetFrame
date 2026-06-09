@@ -61,12 +61,12 @@ impl FrameComparator {
         let mut out = [[0.0f64; 8]; 8];
         let x_ratio = src_width as f64 / 8.0;
         let y_ratio = src_height as f64 / 8.0;
-        for ty in 0..8 {
-            for tx in 0..8 {
+        for (ty, row) in out.iter_mut().enumerate() {
+            for (tx, cell) in row.iter_mut().enumerate() {
                 let sx = (tx as f64 * x_ratio) as u32;
                 let sy = (ty as f64 * y_ratio) as u32;
                 let idx = (sy * src_width + sx) as usize;
-                out[ty][tx] = src[idx] as f64;
+                *cell = src[idx] as f64;
             }
         }
         out
@@ -74,19 +74,19 @@ impl FrameComparator {
 
     fn dct_8x8(block: &[[f64; 8]; 8]) -> [[f64; 8]; 8] {
         let mut out = [[0.0f64; 8]; 8];
-        for u in 0..8 {
-            for v in 0..8 {
+        for (u, out_row) in out.iter_mut().enumerate() {
+            for (v, cell) in out_row.iter_mut().enumerate() {
                 let mut sum = 0.0;
-                for x in 0..8 {
-                    for y in 0..8 {
+                for (x, block_row) in block.iter().enumerate() {
+                    for (y, &val) in block_row.iter().enumerate() {
                         let cx = (x as f64 + 0.5) * std::f64::consts::PI * u as f64 / 8.0;
                         let cy = (y as f64 + 0.5) * std::f64::consts::PI * v as f64 / 8.0;
-                        sum += block[x][y] * (cx.cos() * cy.cos());
+                        sum += val * (cx.cos() * cy.cos());
                     }
                 }
                 let cu = if u == 0 { 1.0 / (8.0_f64).sqrt() } else { 0.5 };
                 let cv = if v == 0 { 1.0 / (8.0_f64).sqrt() } else { 0.5 };
-                out[u][v] = cu * cv * sum;
+                *cell = cu * cv * sum;
             }
         }
         out
@@ -96,10 +96,10 @@ impl FrameComparator {
         let block = Self::downsample_to_8x8(y_plane, width, height);
         let dct = Self::dct_8x8(&block);
         let mut values = Vec::with_capacity(63);
-        for u in 0..8 {
-            for v in 0..8 {
+        for (u, row) in dct.iter().enumerate() {
+            for (v, &val) in row.iter().enumerate() {
                 if u == 0 && v == 0 { continue; }
-                values.push(dct[u][v]);
+                values.push(val);
             }
         }
         values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));

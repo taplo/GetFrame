@@ -1,7 +1,6 @@
 use crate::types::DecodedFrame;
 use serde::{Deserialize, Serialize};
 use super::filter::SceneDetectFilter;
-use super::comparator::FrameComparator;
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
@@ -286,10 +285,11 @@ impl RuleEvaluator for SceneChangeEvaluator {
     }
 }
 
+#[allow(dead_code)]
 pub struct StaticFrameEvaluator {
     threshold: f64,
     method: ComparisonMethod,
-    force: bool,
+    pub force: bool,
 }
 
 impl StaticFrameEvaluator {
@@ -374,10 +374,6 @@ impl RuleEngine {
             static_frame_enabled,
             comparator_config,
         }
-    }
-
-    pub fn static_frame_enabled(&self) -> bool {
-        self.static_frame_enabled
     }
 
     pub fn evaluate(&mut self, frame: &DecodedFrame) -> bool {

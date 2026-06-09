@@ -6,7 +6,6 @@ use crossbeam::channel::Sender;
 use std::collections::BTreeMap;
 use crate::pipeline::rule::{RuleConfig, RuleEngine};
 use crate::pipeline::comparator::FrameComparator;
-use crate::pipeline::rule::ComparisonMethod;
 use crate::stream::health::StreamHealth;
 use crate::types::*;
 use crate::pipeline::{ingest, encode};
