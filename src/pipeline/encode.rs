@@ -60,6 +60,7 @@ mod tests {
             is_keyframe: true,
             frame_number: 0,
             scene_change_score: None,
+            static_frame_score: None,
         };
         let bytes = encode_jpeg(&frame, 85).unwrap();
         assert_eq!(&bytes[..3], &[0xFF, 0xD8, 0xFF]);
@@ -83,6 +84,7 @@ mod tests {
             is_keyframe: true,
             frame_number: 0,
             scene_change_score: None,
+            static_frame_score: None,
         };
         let bytes = encode_jpeg(&frame, 50).unwrap();
         assert_eq!(&bytes[..3], &[0xFF, 0xD8, 0xFF]);
@@ -105,6 +107,7 @@ mod tests {
             is_keyframe: true,
             frame_number: 0,
             scene_change_score: None,
+            static_frame_score: None,
         };
         let low = encode_jpeg(&frame, 10).unwrap();
         let high = encode_jpeg(&frame, 95).unwrap();

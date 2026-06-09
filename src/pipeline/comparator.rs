@@ -238,8 +238,8 @@ mod tests {
     #[test]
     fn test_phash_different_frames() {
         // Horizontal gradient vs vertical gradient — different spatial structure
-        let y1: Vec<u8> = (0..240).flat_map(|y| (0..320).map(move |x| ((x * 255 / 319) as u8)).collect::<Vec<_>>()).collect();
-        let y2: Vec<u8> = (0..240).flat_map(|y| (0..320).map(move |_| ((y * 255 / 239) as u8)).collect::<Vec<_>>()).collect();
+        let y1: Vec<u8> = (0..240).flat_map(|_y| (0..320).map(move |x| (x * 255 / 319) as u8).collect::<Vec<_>>()).collect();
+        let y2: Vec<u8> = (0..240).flat_map(|y| (0..320).map(move |_| (y * 255 / 239) as u8).collect::<Vec<_>>()).collect();
         let mut cmp = FrameComparator::new(ComparisonMethod::PerceptualHash, 0.1);
         assert!(!cmp.is_static(&y1, 320, 240).unwrap());
         assert!(!cmp.is_static(&y2, 320, 240).unwrap());

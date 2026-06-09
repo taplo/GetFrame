@@ -358,19 +358,20 @@ pub struct RuleEngine {
 
 impl RuleEngine {
     pub fn new(configs: &[RuleConfig], time_base: (i32, i32)) -> Self {
-        let evaluators = configs.iter()
+        let evaluators: Vec<(RuleConfig, Box<dyn RuleEvaluator>)> = configs.iter()
             .map(|c| (c.clone(), create_evaluator(c, time_base)))
             .collect();
         let static_frame_enabled = has_static_frame_rule(configs);
+        let frame_comparator = if static_frame_enabled {
+            find_static_frame_config(&evaluators).map(|(t, m, _f)| FrameComparator::new(m, t))
+        } else {
+            None
+        };
         Self {
             evaluators,
             scdet_filter: None,
             scd_enabled: has_scene_change_rule(configs),
-            frame_comparator: if static_frame_enabled {
-                find_static_frame_config(&evaluators).map(|(t, m, _f)| FrameComparator::new(m, t))
-            } else {
-                None
-            },
+            frame_comparator,
             static_frame_enabled,
         }
     }
@@ -741,14 +742,18 @@ mod tests {
 
     #[test]
     fn test_rule_engine_with_static_frame_and_interval() {
-        let rules = vec![
-            RuleConfig::Interval { interval_seconds: 10.0 },
-            RuleConfig::StaticFrame {
-                threshold: 0.05,
-                method: ComparisonMethod::PixelDiff,
-                force: false,
-            },
-        ];
+        // Composite(All) — both Interval AND StaticFrame must trigger
+        let rules = vec![RuleConfig::Composite {
+            operator: CompositeOperator::All,
+            rules: vec![
+                RuleConfig::Interval { interval_seconds: 10.0 },
+                RuleConfig::StaticFrame {
+                    threshold: 0.05,
+                    method: ComparisonMethod::PixelDiff,
+                    force: false,
+                },
+            ],
+        }];
         let mut engine = RuleEngine::new(&rules, (1, 30));
 
         // First frame — always extracted (interval triggers + not static)
@@ -761,12 +766,12 @@ mod tests {
         f1.static_frame_score = Some(true);
         assert!(!engine.evaluate(&f1));
 
-        // Interval due but static → skip (StaticFrame gates it)
+        // Interval due but static → StaticFrame blocks → skip
         let mut f2 = make_frame(300, 2, None);
         f2.static_frame_score = Some(true);
         assert!(!engine.evaluate(&f2));
 
-        // Interval due AND changed → extract
+        // Interval due AND changed → both trigger → extract
         let mut f3 = make_frame(600, 3, None);
         f3.static_frame_score = Some(false);
         assert!(engine.evaluate(&f3));

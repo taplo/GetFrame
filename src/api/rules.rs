@@ -265,6 +265,7 @@ pub async fn list_all_rules(
                     RuleConfig::Fps { .. } => "fps",
                     RuleConfig::SceneChange { .. } => "scene_change",
                     RuleConfig::RateLimited { .. } => "rate_limited",
+                    RuleConfig::StaticFrame { .. } => "static_frame",
                     RuleConfig::Composite { .. } => "composite",
                 };
                 if type_name != filter_type.as_str() { continue; }
