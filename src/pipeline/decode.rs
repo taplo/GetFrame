@@ -5,6 +5,8 @@ use ffmpeg_next as ffmpeg;
 use crossbeam::channel::Sender;
 use std::collections::BTreeMap;
 use crate::pipeline::rule::{RuleConfig, RuleEngine};
+use crate::pipeline::comparator::FrameComparator;
+use crate::pipeline::rule::ComparisonMethod;
 use crate::stream::health::StreamHealth;
 use crate::types::*;
 use crate::pipeline::{ingest, encode};
@@ -69,6 +71,10 @@ pub fn run_decode_pipeline(
         );
     }
 
+    // FrameComparator lives across rebuild calls to maintain prev_y state
+    let mut frame_comparator: Option<FrameComparator> = rule_engine.comparator_config
+        .map(|(method, threshold)| FrameComparator::new(method, threshold));
+
     for (stream_idx, recv_packet) in demuxed.ictx.packets() {
         if shutdown.is_cancelled() {
             tracing::info!("Decode pipeline shutting down");
@@ -119,36 +125,8 @@ pub fn run_decode_pipeline(
                     };
                     t_scdet_sum += _scd_start.elapsed();
 
-                    // Static frame comparison
-                    let _static_start = Instant::now();
-                    let static_frame_score = if rule_engine.static_frame_enabled() {
-                        let y_data = frame.data(0);
-                        let y_stride = frame.stride(0) as u32;
-                        let width = demuxed.width;
-                        let height = demuxed.height;
-                        let y_region: Vec<u8> = if y_stride == width {
-                            y_data.to_vec()
-                        } else {
-                            y_data.chunks(y_stride as usize)
-                                .take(height as usize)
-                                .flat_map(|row| &row[..width as usize])
-                                .copied()
-                                .collect()
-                        };
-                        match &mut rule_engine.frame_comparator {
-                            Some(cmp) => match cmp.is_static(&y_region, width, height) {
-                                Ok(result) => Some(result),
-                                Err(e) => {
-                                    tracing::warn!(stream_id = %stream_id, error = %e, "Static frame comparison failed");
-                                    None
-                                }
-                            }
-                            None => None,
-                        }
-                    } else {
-                        None
-                    };
-                    t_static_sum += _static_start.elapsed();
+                    // Static frame comparison is performed AFTER PTS reordering
+                    // (see below) to ensure frames are compared in display order.
 
                     let _copy_start = Instant::now();
                     let decoded = DecodedFrame {
@@ -166,7 +144,7 @@ pub fn run_decode_pipeline(
                         is_keyframe: is_key,
                         frame_number: total_frames_decoded - 1,
                         scene_change_score,
-                        static_frame_score,
+                        static_frame_score: None,
                     };
                     t_copy_sum += _copy_start.elapsed();
 
@@ -174,7 +152,7 @@ pub fn run_decode_pipeline(
                     reorder_depth = std::cmp::max(reorder_depth, pts_queue.len());
 
                     while pts_queue.len() > 2 {
-                        if let Some((_, ready_frame)) = pts_queue.pop_first() {
+                        if let Some((_, mut ready_frame)) = pts_queue.pop_first() {
                             // Hot-reload: rebuild engine from shared rules every frame
                             // (lock is uncontended; overhead neglible vs JPEG encode)
                             {
@@ -190,6 +168,30 @@ pub fn run_decode_pipeline(
                                     );
                                 }
                             }
+
+                            // Static frame comparison in PTS order (after reordering)
+                            let _static_start = Instant::now();
+                            if let Some(ref mut cmp) = frame_comparator {
+                                let y_stride = ready_frame.y_stride as u32;
+                                let y_data = &ready_frame.y_plane;
+                                let y_region: Vec<u8> = if y_stride == ready_frame.width {
+                                    y_data.to_vec()
+                                } else {
+                                    y_data.chunks(y_stride as usize)
+                                        .take(ready_frame.height as usize)
+                                        .flat_map(|row| &row[..ready_frame.width as usize])
+                                        .copied()
+                                        .collect()
+                                };
+                                ready_frame.static_frame_score = match cmp.is_static(&y_region, ready_frame.width, ready_frame.height) {
+                                    Ok(result) => Some(result),
+                                    Err(e) => {
+                                        tracing::warn!(stream_id = %stream_id, error = %e, "Static frame comparison failed");
+                                        None
+                                    }
+                                };
+                            }
+                            t_static_sum += _static_start.elapsed();
 
                             let _rule_start = Instant::now();
                             let should_extract = rule_engine.evaluate(&ready_frame);
@@ -322,7 +324,27 @@ pub fn run_decode_pipeline(
 
     // Drain remaining frames
     #[allow(clippy::collapsible_if)]
-    while let Some((_, ready_frame)) = pts_queue.pop_first() {
+    while let Some((_, mut ready_frame)) = pts_queue.pop_first() {
+        if let Some(ref mut cmp) = frame_comparator {
+            let y_stride = ready_frame.y_stride as u32;
+            let y_data = &ready_frame.y_plane;
+            let y_region: Vec<u8> = if y_stride == ready_frame.width {
+                y_data.to_vec()
+            } else {
+                y_data.chunks(y_stride as usize)
+                    .take(ready_frame.height as usize)
+                    .flat_map(|row| &row[..ready_frame.width as usize])
+                    .copied()
+                    .collect()
+            };
+            ready_frame.static_frame_score = match cmp.is_static(&y_region, ready_frame.width, ready_frame.height) {
+                Ok(result) => Some(result),
+                Err(e) => {
+                    tracing::warn!(stream_id = %stream_id, error = %e, "Static frame comparison failed");
+                    None
+                }
+            };
+        }
         if rule_engine.evaluate(&ready_frame) {
             if let Ok(jpeg_bytes) = encode::encode_jpeg(&ready_frame, jpeg_quality) {
                 let timestamp_seconds = ready_frame.pts as f64 * tb_f;

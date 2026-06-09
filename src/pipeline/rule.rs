@@ -352,8 +352,8 @@ pub struct RuleEngine {
     evaluators: Vec<(RuleConfig, Box<dyn RuleEvaluator>)>,
     pub scdet_filter: Option<SceneDetectFilter>,
     scd_enabled: bool,
-    pub frame_comparator: Option<FrameComparator>,
     static_frame_enabled: bool,
+    pub comparator_config: Option<(ComparisonMethod, f64)>,
 }
 
 impl RuleEngine {
@@ -362,8 +362,8 @@ impl RuleEngine {
             .map(|c| (c.clone(), create_evaluator(c, time_base)))
             .collect();
         let static_frame_enabled = has_static_frame_rule(configs);
-        let frame_comparator = if static_frame_enabled {
-            find_static_frame_config(&evaluators).map(|(t, m, _f)| FrameComparator::new(m, t))
+        let comparator_config = if static_frame_enabled {
+            find_static_frame_config(&evaluators).map(|(t, m, _f)| (m, t))
         } else {
             None
         };
@@ -371,8 +371,8 @@ impl RuleEngine {
             evaluators,
             scdet_filter: None,
             scd_enabled: has_scene_change_rule(configs),
-            frame_comparator,
             static_frame_enabled,
+            comparator_config,
         }
     }
 
@@ -393,12 +393,6 @@ impl RuleEngine {
             self.scdet_filter = None;
         }
         self.static_frame_enabled = has_static_frame_rule(configs);
-        if self.static_frame_enabled {
-            self.frame_comparator = find_static_frame_config(&self.evaluators)
-                .map(|(t, m, _f)| FrameComparator::new(m, t));
-        } else {
-            self.frame_comparator = None;
-        }
     }
 
     pub fn scd_enabled(&self) -> bool {

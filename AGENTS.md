@@ -361,6 +361,21 @@ ssh taplo@192.168.3.123 'cd /home/taplo/getframe/benchmark && WORKER_IMAGE=getfr
 - **Bug 修复**: MySQL TIMESTAMP → DATETIME（sqlx 的 NaiveDateTime 不兼容 TIMESTAMP）
 - **测试结果**: Auth 测试 10/10 通过，Full Flow 回归 14/14 通过（含 auth login 步骤）
 
+### Fix 14 — FrameComparator 持久化修复（2026-06-09）
+- **文件**: `src/pipeline/decode.rs`, `src/pipeline/rule.rs`
+- **问题**: 两个 bug 导致 StaticFrame 规则无法正确跳帧：
+  - **Bug A (PTS 重排)**: FrameComparator 在 PTS 排序前的解码顺序中比较，忽略了 `pts_queue` 重排。修复: 将比较移到 drain loop（PTS 排序后）
+  - **Bug B (rebuild 重置)**: `RuleEngine::rebuild()`（每帧由 hot-reload 触发）创建新 `FrameComparator`，丢失 `prev_y` 状态。修复: 将 `FrameComparator` 从 `RuleEngine` 移出，作为 `decode.rs` 中的持久局部变量
+- **验证结果**:
+  | 方法 | 阈值 | 跳帧率 |
+  |------|------|--------|
+  | PixelDiff | 0.005 | 98.0% ✅ |
+  | PixelDiff | 0.01 | 98.0% ✅ |
+  | PixelDiff | 0.05 | 0.4% ❌ |
+  | PerceptualHash | 0.05 | 99.96% ✅ |
+  | SSIM | 0.95 | 0.4% ❌ |
+- **关键**: PixelDiff 0.005–0.01 和 PerceptualHash 0.05 适用于监控视频。SSIM 对 HEVC 量化噪声过敏感。avg_static_us ~3ms (1080p，Y plane 扫描)。修复后解码管线从 ~24ms/frame 降至 ~15ms/frame（JPEG 编码仅 2% 帧）
+
 ## 基准测试命令
 
 ```bash
