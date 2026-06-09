@@ -376,6 +376,81 @@ ssh taplo@192.168.3.123 'cd /home/taplo/getframe/benchmark && WORKER_IMAGE=getfr
   | SSIM | 0.95 | 0.4% ❌ |
 - **关键**: PixelDiff 0.005–0.01 和 PerceptualHash 0.05 适用于监控视频。SSIM 对 HEVC 量化噪声过敏感。avg_static_us ~3ms (1080p，Y plane 扫描)。修复后解码管线从 ~24ms/frame 降至 ~15ms/frame（JPEG 编码仅 2% 帧）
 
+## API 使用示例
+
+### StaticFrame 规则
+
+```bash
+# 1. 登录获取 token
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"changeme123"}' | \
+  python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")
+
+# 2. 创建流
+SID=$(curl -s -X POST http://localhost:8080/api/v1/streams \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"config":{"name":"static-test","source_url":"file:///data/video.mp4","source_type":"file","extract_interval_seconds":1.0}}' | \
+  python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
+
+# 3. 删除默认 Interval 规则（索引 0）
+curl -X DELETE "http://localhost:8080/api/v1/streams/$SID/rules/0" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 4. 添加 Composite(All) 规则：Interval + StaticFrame
+curl -X POST "http://localhost:8080/api/v1/streams/$SID/rules" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"rule":{"type":"composite","operator":"all","rules":[
+    {"type":"interval","interval_seconds":1.0},
+    {"type":"static_frame","threshold":0.01,"method":"pixel_diff","force":false}
+  ]}}'
+
+# 5. PixelDiff 方法（推荐用于监控视频）
+curl -X PUT "http://localhost:8080/api/v1/streams/$SID/rules/0" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"rule":{"type":"composite","operator":"all","rules":[
+    {"type":"interval","interval_seconds":1.0},
+    {"type":"static_frame","threshold":0.01,"method":"pixel_diff","force":false}
+  ]}}'
+
+# 6. PerceptualHash 方法（对光照变化更鲁棒）
+curl -X PUT "http://localhost:8080/api/v1/streams/$SID/rules/0" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"rule":{"type":"composite","operator":"all","rules":[
+    {"type":"interval","interval_seconds":1.0},
+    {"type":"static_frame","threshold":0.05,"method":"perceptual_hash","force":false}
+  ]}}'
+
+# 7. SSIM 方法（对 HEVC 量化噪声过敏感，不推荐）
+curl -X PUT "http://localhost:8080/api/v1/streams/$SID/rules/0" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"rule":{"type":"composite","operator":"all","rules":[
+    {"type":"interval","interval_seconds":1.0},
+    {"type":"static_frame","threshold":0.95,"method":"ssim","force":false}
+  ]}}'
+
+# 8. force=true：强制抽取帧（覆盖静态判定）
+curl -X PUT "http://localhost:8080/api/v1/streams/$SID/rules/0" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"rule":{"type":"composite","operator":"all","rules":[
+    {"type":"interval","interval_seconds":30.0},
+    {"type":"static_frame","threshold":0.01,"method":"pixel_diff","force":true}
+  ]}}'
+```
+
+### 推荐阈值
+| 方法 | 推荐阈值 | 跳帧率 | 适用场景 |
+|------|---------|--------|---------|
+| PixelDiff | 0.005–0.01 | 98% | 监控视频（默认推荐） |
+| PerceptualHash | 0.05 | 99.96% | 光照变化大的场景 |
+| SSIM | 0.95 | 0.4% | ❌ HEVC 量化噪声过敏感 |
+
 ## 基准测试命令
 
 ```bash

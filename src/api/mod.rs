@@ -74,6 +74,7 @@ use crate::task::TaskManager;
         crate::config::KafkaConfig,
         crate::pipeline::rule::RuleConfig,
         crate::pipeline::rule::CompositeOperator,
+        crate::pipeline::rule::ComparisonMethod,
         crate::api::metrics::MetricsHistoryResponse,
         crate::api::metrics::MetricsPointResponse,
         crate::api::metrics::HistoryQuery,
