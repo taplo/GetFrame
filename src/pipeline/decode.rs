@@ -325,6 +325,7 @@ pub fn run_decode_pipeline(
     // Drain remaining frames
     #[allow(clippy::collapsible_if)]
     while let Some((_, mut ready_frame)) = pts_queue.pop_first() {
+        let _eof_static_start = Instant::now();
         if let Some(ref mut cmp) = frame_comparator {
             let y_stride = ready_frame.y_stride as u32;
             let y_data = &ready_frame.y_plane;
@@ -344,6 +345,9 @@ pub fn run_decode_pipeline(
                     None
                 }
             };
+            t_static_sum += _eof_static_start.elapsed();
+        } else {
+            t_static_sum += _eof_static_start.elapsed();
         }
         if rule_engine.evaluate(&ready_frame) {
             if let Ok(jpeg_bytes) = encode::encode_jpeg(&ready_frame, jpeg_quality) {
@@ -373,5 +377,6 @@ pub fn run_decode_pipeline(
         reorder_depth = reorder_depth,
         "Decode pipeline finished"
     );
+
     Ok(())
 }

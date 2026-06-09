@@ -8,7 +8,7 @@ import { EventTimeline } from "@/components/EventTimeline"
 import type { TaskInfo } from "@/types/task"
 import type { StreamInfo } from "@/types/stream"
 import type { TaskEvent } from "@/api/tasks"
-import type { RuleConfig } from "@/types/rule"
+import type { RuleConfig, ComparisonMethod } from "@/types/rule"
 
 const statusLabel: Record<string, string> = { Created: "已创建", Running: "运行中", Paused: "已暂停", Stopped: "已停止", Error: "异常" }
 const statusStyle: Record<string, string> = {
@@ -19,8 +19,12 @@ const statusStyle: Record<string, string> = {
   Created: "text-blue-700 bg-blue-50 border-blue-200",
 }
 
+const METHOD_LABELS: Record<ComparisonMethod, string> = {
+  pixel_diff: "PixelDiff", perceptual_hash: "PerceptualHash", ssim: "SSIM",
+}
+
 const RULE_LABELS: Record<string, string> = {
-  interval: "定时抽帧", fps: "固定帧率", scene_change: "场景变化", rate_limited: "限速", composite: "复合规则",
+  interval: "定时抽帧", fps: "固定帧率", scene_change: "场景变化", rate_limited: "限速", static_frame: "静态帧过滤", composite: "复合规则",
 }
 
 function ruleSummary(rule: RuleConfig): string {
@@ -29,6 +33,7 @@ function ruleSummary(rule: RuleConfig): string {
     case "fps": return `${rule.fps} FPS`
     case "scene_change": return `阈值 ${rule.threshold}`
     case "rate_limited": return `限速 ${rule.max_per_minute}/分钟`
+    case "static_frame": return `${METHOD_LABELS[rule.method ?? "pixel_diff"]}, ${rule.threshold}${rule.force ? ", 强制" : ""}`
     case "composite": return `复合 (${rule.operator})`
   }
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
 import { RuleEditor } from "./RuleEditor"
-import type { RuleConfig } from "@/types/rule"
+import type { RuleConfig, ComparisonMethod } from "@/types/rule"
 
 describe("RuleEditor", () => {
   it("renders all rule type buttons", () => {
@@ -10,6 +10,7 @@ describe("RuleEditor", () => {
     expect(screen.getByText("固定帧率")).toBeTruthy()
     expect(screen.getByText("场景变化")).toBeTruthy()
     expect(screen.getByText("限速")).toBeTruthy()
+    expect(screen.getByText("静态帧过滤")).toBeTruthy()
     expect(screen.getByText("复合规则")).toBeTruthy()
   })
 
@@ -121,5 +122,57 @@ describe("RuleEditor", () => {
     const rules: RuleConfig[] = [{ type: "composite", operator: "any", rules: [] }]
     render(<RuleEditor rules={rules} onChange={() => {}} />)
     expect(screen.getByText(/复合 \(any\)/)).toBeTruthy()
+  })
+
+  it("shows static_frame options when type selected", () => {
+    render(<RuleEditor rules={[]} onChange={() => {}} />)
+    fireEvent.click(screen.getByText("静态帧过滤"))
+    expect(screen.getByText("比较方法")).toBeTruthy()
+    expect(screen.getByText("强制抽取（覆盖静态判定）")).toBeTruthy()
+    expect(screen.getByDisplayValue("0.005")).toBeTruthy()
+  })
+
+  it("adds static_frame rule with default values", () => {
+    const onChange = vi.fn()
+    render(<RuleEditor rules={[]} onChange={onChange} />)
+    fireEvent.click(screen.getByText("静态帧过滤"))
+    fireEvent.click(screen.getByText("添加规则"))
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const rules = onChange.mock.calls[0][0] as RuleConfig[]
+    expect(rules).toHaveLength(1)
+    expect(rules[0].type).toBe("static_frame")
+    expect(rules[0].threshold).toBe(0.005)
+    expect(rules[0].method).toBe("pixel_diff")
+    expect(rules[0].force).toBe(false)
+  })
+
+  it("adds static_frame rule with custom values", () => {
+    const onChange = vi.fn()
+    render(<RuleEditor rules={[]} onChange={onChange} />)
+    fireEvent.click(screen.getByText("静态帧过滤"))
+    const thresholdInput = screen.getByDisplayValue("0.005") as HTMLInputElement
+    fireEvent.change(thresholdInput, { target: { value: "0.01" } })
+    const methodSelect = screen.getByRole("combobox") as HTMLSelectElement
+    fireEvent.change(methodSelect, { target: { value: "perceptual_hash" } })
+    const forceCheckbox = screen.getByRole("checkbox") as HTMLInputElement
+    fireEvent.click(forceCheckbox)
+    fireEvent.click(screen.getByText("添加规则"))
+    const rules = onChange.mock.calls[0][0] as RuleConfig[]
+    expect(rules[0].threshold).toBe(0.01)
+    expect(rules[0].method).toBe("perceptual_hash")
+    expect(rules[0].force).toBe(true)
+  })
+
+  it("renders static_frame rule summary", () => {
+    const rules: RuleConfig[] = [{ type: "static_frame", threshold: 0.005, method: "ssim", force: false }]
+    render(<RuleEditor rules={rules} onChange={() => {}} />)
+    expect(screen.getByText(/SSIM/)).toBeTruthy()
+    expect(screen.getByText(/0.005/)).toBeTruthy()
+  })
+
+  it("renders static_frame rule summary with force", () => {
+    const rules: RuleConfig[] = [{ type: "static_frame", threshold: 0.01, method: "pixel_diff", force: true }]
+    render(<RuleEditor rules={rules} onChange={() => {}} />)
+    expect(screen.getByText(/强制/)).toBeTruthy()
   })
 })

@@ -2,14 +2,21 @@ import { useState, useEffect, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { rulesApi } from "@/api/rules"
 import { streamsApi } from "@/api/streams"
-import type { GlobalRuleItem, RuleConfig } from "@/types/rule"
+import type { GlobalRuleItem, RuleConfig, ComparisonMethod } from "@/types/rule"
 import type { StreamInfo } from "@/types/stream"
+
+const METHOD_LABELS: Record<ComparisonMethod, string> = {
+  pixel_diff: "PixelDiff",
+  perceptual_hash: "PerceptualHash",
+  ssim: "SSIM",
+}
 
 const RULE_LABELS: Record<string, string> = {
   interval: "定时抽帧",
   fps: "固定帧率",
   scene_change: "场景变化",
   rate_limited: "限速",
+  static_frame: "静态帧过滤",
   composite: "复合规则",
 }
 
@@ -19,6 +26,7 @@ function ruleSummary(rule: RuleConfig): string {
     case "fps": return `${rule.fps} FPS`
     case "scene_change": return `阈值 ${rule.threshold}`
     case "rate_limited": return `限速 ${rule.max_per_minute}/分钟`
+    case "static_frame": return `${METHOD_LABELS[rule.method ?? "pixel_diff"]}, ${rule.threshold}${rule.force ? ", 强制" : ""}`
     case "composite": return `复合 (${rule.operator})`
   }
 }
